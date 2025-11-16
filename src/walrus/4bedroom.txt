@@ -1,0 +1,6 @@
+bath: tZ3Vj9aP9f_GiKRTorfiN7hwCZ4i5Ioh9ueLFpwapAk
+house: 9vTOsWU5jBZLJLrAMzRPKr9qwQDpRVDxLBzYwD6UJlQ
+kitchen: azh18rQkr3LoYlRn2mu8GsTQpx5wToAe2v2jKCJQstw
+parlour: E3ICHk9v7o28dKFIHu3o5brxHYV2Bx1YZlkY_9UCWCs
+rooms: 5p7UVQwvzAQhZzGUzbr3oNY5p_OLgO8ut5RVl4I2RpY
+toilet: lw3ay6ZS661qQgTyWSd73JqGF6NImlRjZLOcp401Oec

@@ -1,0 +1,3 @@
+house_id: uuU-FWdxPnNcG-C5_qW6kc4bbvKaQXzWlCCLFDZa2V8
+bathroom: ZAVroSQeh5EegMWaRe3YuoamNTO3qKTRU22Qj31147k
+kitchenandlivingroom: 2_5qyZnJt-7efYfztEPHuDjqe5OaMbQEQmbvT9-NKfw
