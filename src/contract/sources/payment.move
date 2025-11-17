@@ -1,6 +1,6 @@
 module rental_marketplace::payment {
     use sui::coin::{Self, Coin};
-    use usdc::USDC;
+    use usdc::usdc::USDC;
     use sui::event;
     use rental_marketplace::house;
     use rental_marketplace::caretaker_earnings;
