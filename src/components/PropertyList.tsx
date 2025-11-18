@@ -1,7 +1,4 @@
 import { useState, useEffect } from 'react'
-import blobIdsMap from '../walrus/blobIds'
-import { displayWalrusImage, revokeImageUrl } from '../walrus/client'
-import { useRef } from 'react'
 
 interface Property {
   id: string
@@ -18,29 +15,6 @@ interface Property {
 
 interface PropertyListProps {
   location: any
-}
-
-// Choose a blob id list for the given bedroom count. If exact count not present,
-// choose the available count with the smallest absolute difference (nearest match).
-function pickBlobIdForBedrooms(
-  map: Record<number, string[]>,
-  bedrooms: number,
-  index: number,
-): string | null {
-  // if exact match and has entries, use it
-  if (map[bedrooms] && map[bedrooms].length > 0) {
-    return map[bedrooms][index % map[bedrooms].length]
-  }
-
-  // find nearest existing bedroom count
-  const keys = Object.keys(map)
-    .map((k) => Number(k))
-    .filter((k) => map[k] && map[k].length > 0)
-  if (keys.length === 0) return null
-
-  keys.sort((a, b) => Math.abs(a - bedrooms) - Math.abs(b - bedrooms))
-  const nearest = keys[0]
-  return map[nearest][index % map[nearest].length]
 }
 
 const generateMockProperties = (location: any): Property[] => {
@@ -98,11 +72,7 @@ const generateMockProperties = (location: any): Property[] => {
       bathrooms,
       area: `${sqm} sqm`,
       type,
-      // Pick blob id by bedroom count; fall back to generated id if none found
-      walrusId: (() => {
-        const picked = pickBlobIdForBedrooms(blobIdsMap, bedrooms, i)
-        return picked ?? `walrus_${Math.random().toString(36).substring(2, 15)}`
-      })(),
+      walrusId: `walrus_${Math.random().toString(36).substring(2, 15)}`
     })
   }
   
@@ -112,8 +82,6 @@ const generateMockProperties = (location: any): Property[] => {
 const PropertyList = ({ location }: PropertyListProps) => {
   const [properties, setProperties] = useState<Property[]>([])
   const [loading, setLoading] = useState(true)
-  const [imageUrls, setImageUrls] = useState<Record<string, string>>({})
-  const createdUrlsRef = useRef<string[]>([])
 
   useEffect(() => {
     if (!location.city && !location.state) return
@@ -124,49 +92,11 @@ const PropertyList = ({ location }: PropertyListProps) => {
     const timer = setTimeout(() => {
       const mockProperties = generateMockProperties(location)
       setProperties(mockProperties)
-      // Attempt to fetch images for each property using the walrus client. Failures are ignored
-      ;(async () => {
-        const results = await Promise.allSettled(
-          mockProperties.map(async (p) => {
-            try {
-              const url = await displayWalrusImage(p.walrusId)
-              return { id: p.walrusId, url }
-            } catch (e) {
-              // network or walrus errors shouldn't block rendering
-              return { id: p.walrusId, url: '' }
-            }
-          }),
-        )
-
-        const map: Record<string, string> = {}
-        for (const r of results) {
-          if (r.status === 'fulfilled') {
-            const v = r.value as any
-            map[v.id] = v.url
-            if (v.url) createdUrlsRef.current.push(v.url)
-          }
-        }
-        setImageUrls(map)
-      })()
       setLoading(false)
     }, 1500)
 
     return () => clearTimeout(timer)
   }, [location])
-
-  // Revoke object URLs on unmount to avoid memory leaks
-  useEffect(() => {
-    return () => {
-      for (const u of createdUrlsRef.current) {
-        try {
-          revokeImageUrl(u)
-        } catch (e) {
-          // ignore
-        }
-      }
-      createdUrlsRef.current = []
-    }
-  }, [])
 
   if (loading) {
     return (
@@ -198,16 +128,8 @@ const PropertyList = ({ location }: PropertyListProps) => {
           <div key={property.id} className="property-card">
             <div className="property-image">
               <div className="placeholder-image">
-                {/* If an image URL was fetched for this property's walrus ID, render it */}
-                {imageUrls[property.walrusId] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={imageUrls[property.walrusId]} alt={property.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <>
-                    <span className="property-type">{property.type}</span>
-                    <div className="image-icon">🏠</div>
-                  </>
-                )}
+                <span className="property-type">{property.type}</span>
+                <div className="image-icon">🏠</div>
               </div>
               <div className="property-badge">✓ Verified</div>
             </div>
