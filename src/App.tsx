@@ -1,76 +1,58 @@
-import { useState } from 'react'
-import LocationSelector from './components/LocationSelector'
-import PropertyList from './components/PropertyList'
-import { useSui } from './sui/SuiProviders'
-import './styles/App.css'
-import { loadImageUrlFromBlobId, getDirectWalrusUrl } from './walrus/client';
+// src/App.tsx
+import { useState, useEffect } from 'react';
+import { ConnectButton, useCurrentAccount } from '@mysten/dapp-kit';
+import { UploadZone } from './components/UploadZone';
+import { ImageCard } from './components/ImageCard';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
-
-
-
-
-
-
-
-
-
-
-interface Location {
-  country?: string
-  state?: string
-  city?: string
+interface Image {
+  blobId: string;
+  url: string;
+  timestamp: number;
 }
 
 function App() {
-  const [selectedLocation, setSelectedLocation] = useState<Location>({})
-  const { isConnected, connect } = useSui()
+  const account = useCurrentAccount();
+  const [images, setImages] = useState<Image[]>([]);
 
-  const handleLocationSelect = (location: Location) => {
-    setSelectedLocation(location)
-  }
+  useEffect(() => {
+    const saved = localStorage.getItem('dwello-images');
+    if (saved) setImages(JSON.parse(saved));
+  }, []);
+
+  const addImage = (blobId: string, url: string) => {
+    const newImage = { blobId, url, timestamp: Date.now() };
+    const updated = [newImage, ...images];
+    setImages(updated);
+    localStorage.setItem('dwello-images', JSON.stringify(updated));
+  };
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <div className="header-content">
-          <h1>Dwello</h1>
-          <p className="header-subtitle">Powered by Sui & Walrus</p>
-        </div>
-        <button
-          className={`connect-btn ${isConnected ? 'connected' : ''}`}
-          onClick={connect}
-        >
-          {isConnected ? '✓ Connected' : 'Connect Wallet'}
-        </button>
-      </header>
-      <main className="app-main">
-        {!isConnected ? (
-          <div className="connect-prompt">
-            <div className="prompt-icon">🔐</div>
-            <h2>Connect Your Sui Wallet</h2>
-            <p>Connect your wallet to start exploring properties worldwide</p>
-            <p className="prompt-subtext">Secure blockchain-verified real estate listings</p>
-            <button className="connect-btn-large" onClick={connect}>
-              Connect Wallet
-            </button>
-          </div>
-        ) : (
+    <>
+      <div className="app">
+        <header>
+          <h1>Dwello 🦭</h1>
+          <ConnectButton />
+        </header>
+
+        {account ? (
           <>
-            <LocationSelector
-              onLocationSelect={handleLocationSelect}
-              selectedLocation={selectedLocation}
-            />
-            {(selectedLocation?.city || selectedLocation?.state) && (
-              <PropertyList location={selectedLocation ?? {}} />  
-            )}
+            <UploadZone onUpload={addImage} />
+            
+            <div className="gallery">
+              {images.map((img) => (
+                <ImageCard key={img.blobId} blobId={img.blobId} url={img.url} />
+              ))}
+            </div>
           </>
+        ) : (
+          <p>Connect wallet to upload permanent images to Walrus</p>
         )}
-      </main>
-      <footer className="app-footer">
-        <p>Built on Sui Network • Data stored on Walrus</p>
-      </footer>
-    </div>
-  )
+      </div>
+      <ToastContainer position="bottom-right" />
+    </>
+  );
 }
 
-export default App
+export default App;
