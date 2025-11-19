@@ -3,6 +3,17 @@ import LocationSelector from './components/LocationSelector'
 import PropertyList from './components/PropertyList'
 import { useSui } from './sui/SuiProviders'
 import './styles/App.css'
+import { loadImageUrlFromBlobId, getDirectWalrusUrl } from './walrus/client';
+
+
+
+
+
+
+
+
+
+
 
 interface Location {
   country?: string
