@@ -25,14 +25,13 @@ function App() {
           <h1>Dwello</h1>
           <p className="header-subtitle">Powered by Sui & Walrus</p>
         </div>
-        <button 
+        <button
           className={`connect-btn ${isConnected ? 'connected' : ''}`}
           onClick={connect}
         >
           {isConnected ? '✓ Connected' : 'Connect Wallet'}
         </button>
       </header>
-
       <main className="app-main">
         {!isConnected ? (
           <div className="connect-prompt">
@@ -46,18 +45,16 @@ function App() {
           </div>
         ) : (
           <>
-            <LocationSelector 
+            <LocationSelector
               onLocationSelect={handleLocationSelect}
               selectedLocation={selectedLocation}
             />
-            
-            {(selectedLocation.city || selectedLocation.state) && (
-              <PropertyList location={selectedLocation} />
+            {(selectedLocation?.city || selectedLocation?.state) && (
+              <PropertyList location={selectedLocation ?? {}} />  
             )}
           </>
         )}
       </main>
-
       <footer className="app-footer">
         <p>Built on Sui Network • Data stored on Walrus</p>
       </footer>

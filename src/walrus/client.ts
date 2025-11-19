@@ -1,49 +1,85 @@
-import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
-import { getFullnodeUrl } from '@mysten/sui/client';
-import { walrus } from '@mysten/walrus';
-import bedroomBlobIds from './bloblds';
+// src/walrus/client.ts
+import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
+import { WalrusClient } from '@mysten/walrus';
 
-const client = new SuiJsonRpcClient({
-	url: getFullnodeUrl('testnet'),
-	// Setting network on your client is required for walrus to work correctly
-	network: 'testnet',
-}).$extend(
-	walrus({
-		storageNodeClientOptions: {
-			fetch: (url, options) => {
-				console.log('fetching', url);
-				return fetch(url, options);
-			},
-			timeout: 60_000,
-		},
-	}),
-);
+// Cache for blob URLs to avoid re-fetching
+const blobUrlCache = new Map<string, string>();
+let walrusClient: WalrusClient | null = null;
 
-// 1. Fetch the file from Walrus by blob ID
+// Initialize Walrus client
+const initWalrusClient = async (): Promise<WalrusClient> => {
+  if (walrusClient) return walrusClient;
 
-export async function displayWalrusImage(blobId: string): Promise<String> {
-const blobData = await client.walrus.readBlob({ blobId });
-// Create a Blob object with the correct MIME type
-const safeArray = new Uint8Array(blobData); // This ensures the buffer is ArrayBuffer
-const imageBlob = new Blob([safeArray.buffer], { type: 'image/jpg' });
+  const suiClient = new SuiClient({
+    url: getFullnodeUrl('testnet'),
+  });
 
-// Create a URL for the Blob
-const imageUrl = URL.createObjectURL(imageBlob);
-return imageUrl;
+  walrusClient = new WalrusClient({
+    network: 'testnet',
+    suiClient,
+  });
 
-}
+  return walrusClient;
+};
 
-async function test() {
-	try {
-		// Get the first blob ID from 1-bedroom
-		const blobId = bedroomBlobIds[1][0];
-		console.log('Testing with blob ID:', blobId);
-		
-		const result = await displayWalrusImage(blobId);
-		console.log('Result:', result);
-	} catch (err) {
-		console.error('Error:', err);
-	}
-}
+// Fetch blob from Walrus and convert to blob URL
+export const getWalrusBlobUrl = async (blobId: string): Promise<string | null> => {
+  // Return cached URL if available
+  if (blobUrlCache.has(blobId)) {
+    return blobUrlCache.get(blobId)!;
+  }
 
-test();
+  try {
+    // Try direct HTTP fetch first (faster)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+    const response = await fetch(`https://walrus.testnet.mystenlabs.com/v1/blobs/${blobId}/content`, {
+      method: 'GET',
+      headers: {
+        'Accept': '*/*',
+      },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // Cache the blob URL
+      blobUrlCache.set(blobId, blobUrl);
+      
+      return blobUrl;
+    }
+  } catch (error) {
+    console.warn(`Direct fetch failed for blob ${blobId}, trying WalrusClient...`, error);
+  }
+
+  // Fallback to WalrusClient if direct fetch fails
+  try {
+    const client = await initWalrusClient();
+    const blobData = await client.readBlob(blobId);
+    
+    if (blobData) {
+      const blob = new Blob([blobData]);
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // Cache the blob URL
+      blobUrlCache.set(blobId, blobUrl);
+      
+      return blobUrl;
+    }
+  } catch (error) {
+    console.warn(`Warning: Could not fetch Walrus blob ${blobId}. Using placeholder instead.`, error);
+  }
+
+  // Return null to use placeholder
+  return null;
+};
+
+// Export the initialized client
+export const getWalrusClient = async (): Promise<WalrusClient> => {
+  return initWalrusClient();
+};
