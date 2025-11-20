@@ -1,42 +1,85 @@
 // src/walrus/client.ts
-import { SuiClient, getFullnodeUrl } from '@mysten/sui/client';
-import { walrus } from '@mysten/walrus';
+import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
+import { WalrusClient } from '@mysten/walrus';
 
-const WALRUS_AGGREGATOR = 'https://walrus.my-gateway.io'; // fastest public aggregator Nov 2025
-const WALRUS_UPLOAD_RELAY = 'https://upload-relay.walrus.space';
+// Cache for blob URLs to avoid re-fetching
+const blobUrlCache = new Map<string, string>();
+let walrusClient: WalrusClient | null = null;
 
-export const client = new SuiClient({
-  url: getFullnodeUrl('mainnet'),
-}).$extend(
-  walrus({
-    aggregatorUrl: WALRUS_AGGREGATOR,
-    uploadRelay: {
-      host: WALRUS_UPLOAD_RELAY,
-      // Optional small tip for faster relay inclusion
-      sendTip: { max: 10_000_000n }, // 0.01 SUI max
-    },
-  })
-);
+// Initialize Walrus client
+const initWalrusClient = async (): Promise<WalrusClient> => {
+  if (walrusClient) return walrusClient;
 
-// Helper: download and display an image from Walrus by blobId
-export async function loadImageUrlFromBlobId(blobId: string): Promise<string> {
-  try {
-    // NEW API: readBlob now requires an object with blobId
-    const blobData = await client.readBlob({ blobId });
+  const suiClient = new SuiClient({
+    url: getFullnodeUrl('testnet'),
+  });
 
-    // blobData is now correctly typed as Uint8Array
-    const blob = new Blob([blobData], { type: 'application/octet-stream' });
+  walrusClient = new WalrusClient({
+    network: 'testnet',
+    suiClient,
+  });
 
-    // For images we can let the browser detect the type, or guess from magic bytes
-    // But simplest & works 99% of the time:
-    const url = URL.createObjectURL(blob);
-    return url;
-  } catch (err) {
-    console.error('Failed to read blob from Walrus', blobId, err);
-    throw err;
+  return walrusClient;
+};
+
+// Fetch blob from Walrus and convert to blob URL
+export const getWalrusBlobUrl = async (blobId: string): Promise<string | null> => {
+  // Return cached URL if available
+  if (blobUrlCache.has(blobId)) {
+    return blobUrlCache.get(blobId)!;
   }
-}
 
-// Optional: direct public URL (no download only, not revocable object URL)
-export const getDirectWalrusUrl = (blobId: string) =>
-  `${WALRUS_AGGREGATOR}/v1/${blobId}`;
+  try {
+    // Try direct HTTP fetch first (faster)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 5 second timeout
+
+    const response = await fetch(`https://cdn.walrus.site/api/v1/blobs/${blobId}`, {
+      method: 'GET',
+      headers: {
+        'Accept': '*/*',
+      },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // Cache the blob URL
+      blobUrlCache.set(blobId, blobUrl);
+      
+      return blobUrl;
+    }
+  } catch (error) {
+    console.warn(`Direct fetch failed for blob ${blobId}, trying WalrusClient...`, error);
+  }
+
+  // Fallback to WalrusClient if direct fetch fails
+  try {
+    const client = await initWalrusClient();
+    const blobData = await client.readBlob(blobId);
+    
+    if (blobData) {
+      const blob = new Blob([blobData]);
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // Cache the blob URL
+      blobUrlCache.set(blobId, blobUrl);
+      
+      return blobUrl;
+    }
+  } catch (error) {
+    console.warn(`Warning: Could not fetch Walrus blob ${blobId}. Using placeholder instead.`, error);
+  }
+
+  // Return null to use placeholder
+  return null;
+};
+
+// Export the initialized client
+export const getWalrusClient = async (): Promise<WalrusClient> => {
+  return initWalrusClient();
+};

@@ -27,3 +27,33 @@
     50% { box-shadow: 0 0 20px rgba(208, 0, 255, 0.8); }
     100% { box-shadow: 0 0 5px rgba(0, 242, 255, 0.5); }
   }
+
+
+
+
+  .connect-btn {
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #00f2ff, #d600ff);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  
+  .connect-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(0, 242, 255, 0.5);
+  }
+  
+  .connect-btn.connected {
+    background: #00ff9d;
+    color: black;
+  }
+  
+  .connect-btn-large {
+    padding: 16px 40px;
+    font-size: 1.2rem;
+    background: linear-gradient(135deg, #d600ff, #00f2ff);
+  }
