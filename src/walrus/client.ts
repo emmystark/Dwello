@@ -1,85 +1,132 @@
-// src/walrus/client.ts
-import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
-import { WalrusClient } from '@mysten/walrus';
+// Walrus storage client utilities
 
-// Cache for blob URLs to avoid re-fetching
-const blobUrlCache = new Map<string, string>();
-let walrusClient: WalrusClient | null = null;
+const WALRUS_AGGREGATOR_URL = 'https://aggregator.walrus-testnet.walrus.space';
+const WALRUS_PUBLISHER_URL = 'https://publisher.walrus-testnet.walrus.space';
 
-// Initialize Walrus client
-const initWalrusClient = async (): Promise<WalrusClient> => {
-  if (walrusClient) return walrusClient;
+export interface UploadResult {
+  blobId: string;
+  url: string;
+}
 
-  const suiClient = new SuiClient({
-    url: getFullnodeUrl('testnet'),
-  });
-
-  walrusClient = new WalrusClient({
-    network: 'testnet',
-    suiClient,
-  });
-
-  return walrusClient;
+/**
+ * Get Walrus blob URL from blob ID (synchronous)
+ */
+export const getWalrusBlobUrl = (blobId: string): string => {
+  if (!blobId) {
+    throw new Error('Blob ID is required');
+  }
+  return `${WALRUS_AGGREGATOR_URL}/v1/blobs/${blobId}`;
 };
 
-// Fetch blob from Walrus and convert to blob URL
-export const getWalrusBlobUrl = async (blobId: string): Promise<string | null> => {
-  // Return cached URL if available
-  if (blobUrlCache.has(blobId)) {
-    return blobUrlCache.get(blobId)!;
-  }
-
+/**
+ * Upload file to Walrus storage
+ */
+export const uploadToWalrus = async (file: File): Promise<UploadResult> => {
   try {
-    // Try direct HTTP fetch first (faster)
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 5 second timeout
+    // Create form data
+    const formData = new FormData();
+    formData.append('file', file);
 
-    const response = await fetch(`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${blobId}`, {
-      method: 'GET',
+    // Upload to Walrus
+    const response = await fetch(`${WALRUS_PUBLISHER_URL}/v1/store`, {
+      method: 'PUT',
+      body: file,
       headers: {
-        'Accept': '*/*',
+        'Content-Type': file.type || 'application/octet-stream',
       },
-      signal: controller.signal,
     });
 
-    clearTimeout(timeoutId);
-
-    if (response.ok) {
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      
-      // Cache the blob URL
-      blobUrlCache.set(blobId, blobUrl);
-      
-      return blobUrl;
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.statusText}`);
     }
-  } catch (error) {
-    console.warn(`Direct fetch failed for blob ${blobId}, trying WalrusClient...`, error);
-  }
 
-  // Fallback to WalrusClient if direct fetch fails
-  try {
-    const client = await initWalrusClient();
-    const blobData = await client.readBlob({ blobId });
+    const result = await response.json();
+    
+    // Extract blob ID from response
+    const blobId = result.newlyCreated?.blobObject?.blobId || 
+                   result.alreadyCertified?.blobId;
 
-    if (blobData) {
-      const blob = new Blob([blobData as any]);
-      const blobUrl = URL.createObjectURL(blob);
-      
-      // Cache the blob URL
-      blobUrlCache.set(blobId, blobUrl);
-      
-      return blobUrl;
+    if (!blobId) {
+      throw new Error('No blob ID returned from Walrus');
     }
-  } catch (error) {
-    console.warn(`Warning: Could not fetch Walrus blob ${blobId}. Using placeholder instead.`, error);
-  }
 
-  // Return null to use placeholder
-  return null;
+    return {
+      blobId,
+      url: getWalrusBlobUrl(blobId),
+    };
+  } catch (error) {
+    console.error('Walrus upload error:', error);
+    throw error;
+  }
 };
 
-// Export the initialized client
-export const getWalrusClient = async (): Promise<WalrusClient> => {
-  return initWalrusClient();
+/**
+ * Upload multiple files to Walrus
+ */
+export const uploadMultipleToWalrus = async (
+  files: File[],
+  onProgress?: (progress: number) => void
+): Promise<UploadResult[]> => {
+  const results: UploadResult[] = [];
+  
+  for (let i = 0; i < files.length; i++) {
+    try {
+      const result = await uploadToWalrus(files[i]);
+      results.push(result);
+      
+      if (onProgress) {
+        onProgress(Math.round(((i + 1) / files.length) * 100));
+      }
+    } catch (error) {
+      console.error(`Failed to upload file ${files[i].name}:`, error);
+    }
+  }
+  
+  return results;
+};
+
+/**
+ * Check if blob exists on Walrus
+ */
+export const checkBlobExists = async (blobId: string): Promise<boolean> => {
+  try {
+    const response = await fetch(getWalrusBlobUrl(blobId), {
+      method: 'HEAD',
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Get blob metadata
+ */
+export const getBlobMetadata = async (blobId: string) => {
+  try {
+    const response = await fetch(getWalrusBlobUrl(blobId), {
+      method: 'HEAD',
+    });
+    
+    if (!response.ok) {
+      throw new Error('Blob not found');
+    }
+
+    return {
+      size: response.headers.get('Content-Length'),
+      type: response.headers.get('Content-Type'),
+      lastModified: response.headers.get('Last-Modified'),
+    };
+  } catch (error) {
+    console.error('Failed to get blob metadata:', error);
+    return null;
+  }
+};
+
+export default {
+  getWalrusBlobUrl,
+  uploadToWalrus,
+  uploadMultipleToWalrus,
+  checkBlobExists,
+  getBlobMetadata,
 };

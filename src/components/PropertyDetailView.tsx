@@ -1,20 +1,10 @@
 import { useState } from 'react'
-import CaretakerChat from './CaretakerChat.tsx'
+import CaretakerChat from './CaretakerChat'
+import type { Property } from '../types'
 import '../styles/PropertyDetail.css'
 
 interface PropertyDetailViewProps {
-  property: {
-    id: string
-    title: string
-    location: string
-    price: string
-    currency: string
-    bedrooms: number
-    bathrooms: number
-    area: string
-    type: string
-    walrusId: string
-  }
+  property: Property
   onBack: () => void
 }
 
@@ -22,15 +12,7 @@ const PropertyDetailView = ({ property, onBack }: PropertyDetailViewProps) => {
   const [selectedImage, setSelectedImage] = useState(0)
   const [showChat, setShowChat] = useState(false)
 
-  // Mock images - replace with actual property images
-  const images = [
-    'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=800',
-    'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800',
-    'https://images.unsplash.com/photo-1484154218962-a197022b5858?w=800',
-    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800'
-  ]
-
-  const caretakerFee = '5%' // Mock caretaker fee
+  const caretakerFee = '5%'
   const caretakerName = 'John Property Manager'
 
   return (

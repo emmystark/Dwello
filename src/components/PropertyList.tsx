@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { getWalrusBlobUrl } from '../walrus/client';
-import bedroomBlobIds from '../walrus/bloblds';
 import { useNavigate } from "react-router-dom";
+import bedroomBlobIds from '../walrus/bloblds';
 
 interface Location {
   country?: string;
@@ -200,7 +200,7 @@ const PropertyList = ({ location }: PropertyListProps) => {
                     style={{ opacity: 0, height:200, width: '100%', transition: "opacity 0.5s" }}
                   />
                 ) : (
-                  <div className="image-icon">🏠</div>
+                  <div className="image-icon"></div>
                 )}
               </div>
 

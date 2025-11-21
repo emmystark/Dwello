@@ -1,26 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import CaretakerChat from './CaretakerChat'; // Make sure this path is correct
-
-interface Property {
-  id: string;
-  houseName: string;
-  address: string;
-  apartments: Apartment[];
-  totalEarnings: number;
-  images: string[];
-  pricing: string;
-}
-
-interface Apartment {
-  id: string;
-  number: number;
-  tenant: string | null;
-  possessionDate: string;
-  expiryDate: string;
-  pricing: string;
-  status: 'occupied' | 'vacant';
-}
+import { getWalrusBlobUrl } from '../walrus/client';
+import bedroomBlobIds from '../walrus/bloblds';
+import type { Property, Message } from '../types';
+import '../styles/PropertyDetails.css';
 
 interface PropertyDetailsProps {
   property?: Property;
@@ -29,12 +12,73 @@ interface PropertyDetailsProps {
 
 const PropertyDetails = ({ property: propProperty, onBack }: PropertyDetailsProps) => {
   const location = useLocation();
-  const [showChat, setShowChat] = useState(false);
-  
-  // Get property from either props or router state
   const property = propProperty || (location.state?.property as Property);
   
-  // Handle back navigation
+  const [propertyImages, setPropertyImages] = useState<string[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [loadingImages, setLoadingImages] = useState(true);
+  
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      sender: 'caretaker',
+      text: `Hi! I'm the property manager. How can I help you with ${property?.houseName || property?.title || 'this property'}?`,
+      timestamp: new Date()
+    }
+  ]);
+  const [inputMessage, setInputMessage] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
+
+  // Load images from Walrus on component mount
+  useEffect(() => {
+    const loadImages = async () => {
+      if (!property) return;
+
+      setLoadingImages(true);
+      const images: string[] = [];
+
+      try {
+        // First, try to load from property's blob IDs
+        if (property.blobIds && property.blobIds.length > 0) {
+          for (const blobId of property.blobIds) {
+            try {
+              const url = getWalrusBlobUrl(blobId);
+              images.push(url);
+            } catch (error) {
+              console.error('Failed to load blob:', blobId, error);
+            }
+          }
+        }
+        // Then try existing image URLs
+        else if (property.images && property.images.length > 0) {
+          images.push(...property.images);
+        }
+        // Try imageUrl property
+        else if (property.imageUrl) {
+          images.push(property.imageUrl);
+        }
+        // Finally, try to load from bedroom blob IDs based on bedrooms count
+        else if (property.bedrooms && bedroomBlobIds[property.bedrooms]) {
+          const availableBlobIds = bedroomBlobIds[property.bedrooms] || [];
+          if (availableBlobIds.length > 0) {
+            const firstEntry = availableBlobIds[0];
+            const blobId = firstEntry.includes(': ') ? firstEntry.split(': ')[1] : firstEntry;
+            const url = getWalrusBlobUrl(blobId);
+            images.push(url);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading images:', error);
+      } finally {
+        setPropertyImages(images);
+        setLoadingImages(false);
+      }
+    };
+
+    loadImages();
+  }, [property]);
+
   const handleBack = () => {
     if (onBack) {
       onBack();
@@ -43,245 +87,364 @@ const PropertyDetails = ({ property: propProperty, onBack }: PropertyDetailsProp
     }
   };
 
-  // Show error state if no property data
+  const handleSendMessage = () => {
+    if (inputMessage.trim() === '') return;
+
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      sender: 'user',
+      text: inputMessage,
+      timestamp: new Date()
+    };
+
+    setMessages([...messages, newMessage]);
+    setInputMessage('');
+
+    setIsTyping(true);
+    setTimeout(() => {
+      const responses = [
+        "I'd be happy to schedule a viewing for you. When would be convenient?",
+        "This property is available now. Would you like to proceed with payment?",
+        "Great question! All utilities are included except internet. Parking is available.",
+        "Yes, pets are welcome with a small deposit. Shall I send you the details?",
+        "The area is very safe with 24/7 security. Would you like a virtual tour?"
+      ];
+      
+      const caretakerReply: Message = {
+        id: (Date.now() + 1).toString(),
+        sender: 'caretaker',
+        text: responses[Math.floor(Math.random() * responses.length)],
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, caretakerReply]);
+      setIsTyping(false);
+    }, 1500);
+  };
+
+  const handlePayForAccess = async () => {
+    setShowPayment(true);
+  };
+
   if (!property) {
     return (
       <div className="property-details-page">
-        <div className="details-header">
-          <button className="btn-back" onClick={handleBack}>
-            <span>←</span>
-            <span>Back to Listings</span>
-          </button>
-        </div>
         <div className="error-state">
           <h2>Property Not Found</h2>
-          <p>Please go back and select a property to view details.</p>
+          <button onClick={handleBack} className="btn-back">Go Back</button>
         </div>
       </div>
     );
   }
 
-  // Safely calculate apartment statistics
   const apartments = property.apartments || [];
   const occupiedCount = apartments.filter(apt => apt.status === 'occupied').length;
   const vacantCount = apartments.length - occupiedCount;
+  const bedrooms = property.bedrooms || 1;
+  const bathrooms = property.bathrooms || 1;
+  const area = property.area || '100 sqm';
 
   return (
     <div className="property-details-page">
-      {/* Caretaker Chat Modal */}
-      {showChat && (
-        <div className="chat-modal-overlay">
-          <div className="chat-modal">
-            <CaretakerChat 
-              caretakerName="Alex Morgan" 
-              propertyTitle={property.houseName}
-              onClose={() => setShowChat(false)}
-            />
-          </div>
-        </div>
-      )}
-
       <div className="details-header">
         <button className="btn-back" onClick={handleBack}>
           <span>←</span>
           <span>Back to {onBack ? 'Inventory' : 'Listings'}</span>
         </button>
         <div className="header-actions">
-          <button className="btn-edit">
-            <span>✏️</span>
-            <span>Edit</span>
+          <button className="btn-save">
+            <span>❤️</span>
+            <span>Save</span>
           </button>
-          <button className="btn-delete">
-            <span>🗑️</span>
-            <span>Delete</span>
+          <button className="btn-share">
+            <span>📤</span>
+            <span>Share</span>
           </button>
         </div>
       </div>
 
-      <div className="details-content">
-        <div className="property-hero">
-          <div className="hero-image">
-            <div className="placeholder-hero">
-              <span className="hero-icon">🏠</span>
-            </div>
-          </div>
-          <div className="hero-info">
-            <h1>{property.houseName}</h1>
-            <p className="hero-address">{property.address}</p>
-            
-            {/* Property Features - Similar to the image */}
-            <div className="property-features-overview">
-              <div className="feature-badge">
-                <span className="feature-icon">🛏️</span>
-                <span>1 bedroom</span>
+      <div className="details-layout">
+        {/* Left Side - Property Info */}
+        <div className="property-main-section">
+          {/* Hero Section */}
+          <div className="property-hero-card">
+            <div className="hero-image-section">
+              <div className="main-property-image">
+                {loadingImages ? (
+                  <div className="placeholder-hero">
+                    <div className="loading-spinner"></div>
+                    <p>Loading images...</p>
+                  </div>
+                ) : propertyImages.length > 0 ? (
+                  <img 
+                    src={propertyImages[selectedImageIndex]} 
+                    alt={property.houseName || property.title}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                      const parent = (e.target as HTMLImageElement).parentElement;
+                      if (parent) {
+                        parent.innerHTML = '<div class="placeholder-hero"><span class="hero-icon">🏠</span></div>';
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="placeholder-hero">
+                    <span className="hero-icon">🏠</span>
+                  </div>
+                )}
+                <div className="image-badge">✓ Verified</div>
               </div>
-              <div className="feature-badge">
-                <span className="feature-icon">✓</span>
-                <span>Verified</span>
-              </div>
-              <div className="feature-badge">
-                <span className="feature-icon">✓</span>
-                <span>Secure</span>
-              </div>
-              <div className="feature-badge">
-                <span className="feature-icon">✓</span>
-                <span>Available</span>
-              </div>
-            </div>
-
-            <div className="hero-stats">
-              <div className="hero-stat">
-                <span className="stat-label">Total Units</span>
-                <span className="stat-value">{apartments.length}</span>
-              </div>
-              <div className="hero-stat">
-                <span className="stat-label">Monthly Revenue</span>
-                <span className="stat-value">${property.totalEarnings?.toLocaleString() || '0'}</span>
-              </div>
-              <div className="hero-stat">
-                <span className="stat-label">Occupancy</span>
-                <span className="stat-value">
-                  {apartments.length > 0 
-                    ? Math.round((occupiedCount / apartments.length) * 100) 
-                    : 0
-                  }%
-                </span>
-              </div>
-            </div>
-
-            {/* Action Buttons - Similar to the image layout */}
-            <div className="action-buttons">
-              <button className="btn-view-details">
-                <span>👁️</span>
-                <span>View details</span>
-              </button>
               
-              <button 
-                className="btn-caretaker-chat"
-                onClick={() => setShowChat(true)}
-              >
-                <div className="chat-btn-content">
-                  <span className="chat-icon">💬</span>
-                  <div className="chat-text">
-                    <span className="chat-title">Caretaker chat</span>
-                    <span className="chat-subtitle">Talk with caretaker</span>
-                  </div>
-                  <span className="chat-arrow">→</span>
-                </div>
-              </button>
-            </div>
-
-            <div className="blockchain-info-detail">
-              <span className="blockchain-badge">🔗 Walrus ID</span>
-              <code className="blockchain-id">{property.id}</code>
-            </div>
-          </div>
-        </div>
-
-        {/* Rest of your existing content */}
-        <div className="apartments-section">
-          <div className="section-header">
-            <h2>Apartments</h2>
-            <div className="filter-badges">
-              <span className="filter-badge all">All ({apartments.length})</span>
-              <span className="filter-badge occupied">Occupied ({occupiedCount})</span>
-              <span className="filter-badge vacant">Vacant ({vacantCount})</span>
-            </div>
-          </div>
-
-          <div className="apartments-grid">
-            {apartments.length > 0 ? (
-              apartments.map(apartment => (
-                <div key={apartment.id} className={`apartment-card ${apartment.status}`}>
-                  <div className="apartment-header">
-                    <div className="apartment-number">
-                      <span className="apt-icon">🚪</span>
-                      <span>Apartment {apartment.number}</span>
+              {propertyImages.length > 1 && (
+                <div className="thumbnail-gallery">
+                  {propertyImages.slice(0, 4).map((img, idx) => (
+                    <div 
+                      key={idx} 
+                      className={`thumbnail-item ${selectedImageIndex === idx ? 'active' : ''}`}
+                      onClick={() => setSelectedImageIndex(idx)}
+                    >
+                      <img 
+                        src={img} 
+                        alt={`View ${idx + 1}`}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
                     </div>
-                    <span className={`status-badge ${apartment.status}`}>
-                      {apartment.status === 'occupied' ? 'Occupied' : 'Vacant'}
-                    </span>
-                  </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
-                  <div className="apartment-body">
+            <div className="hero-content">
+              <h1 className="property-title">{property.houseName || property.title}</h1>
+              <p className="property-location">📍 {property.address || property.location}</p>
+
+              <div className="property-badges">
+                <span className="badge">🛏️ {bedrooms} Bedroom{bedrooms > 1 ? 's' : ''}</span>
+                <span className="badge verified">✓ Verified</span>
+                <span className="badge secure">🔒 Secure</span>
+                <span className="badge available">✓ Available</span>
+              </div>
+
+              <div className="pricing-card">
+                <div className="price-main">
+                  <span className="price-label">Price</span>
+                  <span className="price-amount">
+                    {property.currency || '$'}{property.price || property.pricing}
+                  </span>
+                  <span className="price-period">per year</span>
+                </div>
+                <button className="btn-pay-access" onClick={handlePayForAccess}>
+                  <span>💳</span>
+                  <span>Pay for Access</span>
+                </button>
+              </div>
+
+              <div className="property-stats-grid">
+                <div className="stat-item">
+                  <span className="stat-icon">🏢</span>
+                  <span className="stat-value">{apartments.length || 1}</span>
+                  <span className="stat-label">Total Units</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-icon">🛏️</span>
+                  <span className="stat-value">{bedrooms}</span>
+                  <span className="stat-label">Bedrooms</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-icon">🚿</span>
+                  <span className="stat-value">{bathrooms}</span>
+                  <span className="stat-label">Bathrooms</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-icon">📐</span>
+                  <span className="stat-value">{area}</span>
+                  <span className="stat-label">Area</span>
+                </div>
+              </div>
+
+              <div className="blockchain-verification">
+                <span className="verification-icon">🔗</span>
+                <div className="verification-details">
+                  <span className="verification-label">Blockchain Verified</span>
+                  <code className="verification-id">{property.id || property.walrusId}</code>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Apartments Section */}
+          {apartments.length > 0 && (
+            <div className="apartments-section-card">
+              <div className="section-header">
+                <h2>Available Units</h2>
+                <div className="filter-pills">
+                  <span className="pill all">All {apartments.length}</span>
+                  <span className="pill occupied">Occupied {occupiedCount}</span>
+                  <span className="pill vacant">Vacant {vacantCount}</span>
+                </div>
+              </div>
+
+              <div className="apartments-grid">
+                {apartments.map(apartment => (
+                  <div key={apartment.id} className={`apartment-unit ${apartment.status}`}>
+                    <div className="unit-header">
+                      <div className="unit-number">
+                        <span className="unit-icon">🚪</span>
+                        <span>Unit {apartment.number}</span>
+                      </div>
+                      <span className={`status-pill ${apartment.status}`}>
+                        {apartment.status === 'occupied' ? '✓ Occupied' : '○ Available'}
+                      </span>
+                    </div>
+
                     {apartment.status === 'occupied' ? (
-                      <>
-                        <div className="detail-row">
-                          <span className="detail-label">Tenant</span>
-                          <span className="detail-value">{apartment.tenant || 'Unknown'}</span>
+                      <div className="unit-info">
+                        <div className="info-row">
+                          <span className="info-label">👤 Tenant</span>
+                          <span className="info-value">{apartment.tenant}</span>
                         </div>
-                        <div className="detail-row">
-                          <span className="detail-label">Possession Date</span>
-                          <span className="detail-value">{apartment.possessionDate || 'N/A'}</span>
+                        <div className="info-row">
+                          <span className="info-label">📅 Lease Start</span>
+                          <span className="info-value">{apartment.possessionDate}</span>
                         </div>
-                        <div className="detail-row">
-                          <span className="detail-label">Expiry Date</span>
-                          <span className="detail-value expiry">{apartment.expiryDate || 'N/A'}</span>
+                        <div className="info-row">
+                          <span className="info-label">⏰ Lease End</span>
+                          <span className="info-value highlight">{apartment.expiryDate}</span>
                         </div>
-                        <div className="detail-row">
-                          <span className="detail-label">Pricing</span>
-                          <span className="detail-value pricing">{apartment.pricing || property.pricing}</span>
+                        <div className="info-row">
+                          <span className="info-label">💰 Rent</span>
+                          <span className="info-value price">{apartment.pricing}</span>
                         </div>
-                      </>
+                      </div>
                     ) : (
-                      <div className="vacant-info">
-                        <p className="vacant-text">Available for Rent</p>
-                        <p className="vacant-pricing">{apartment.pricing || property.pricing}</p>
-                        <button className="btn-add-tenant">
-                          <span>➕</span>
-                          <span>Add Tenant</span>
-                        </button>
+                      <div className="unit-vacant">
+                        <p className="vacant-text">Ready for Move-In</p>
+                        <p className="vacant-price">{apartment.pricing || property.pricing}</p>
+                        <button className="btn-apply-unit">Apply Now</button>
                       </div>
                     )}
                   </div>
-
-                  <div className="apartment-footer">
-                    <button className="btn-manage-apt">Manage</button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="no-apartments">
-                <p>No apartments found for this property.</p>
+                ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
-        <div className="analytics-section">
-          <h2>Property Analytics</h2>
-          <div className="analytics-grid">
-            <div className="analytics-card">
-              <h3>Revenue Trend</h3>
-              <div className="chart-placeholder">
-                <div className="chart-bars">
-                  <div className="bar" style={{ height: '60%' }}></div>
-                  <div className="bar" style={{ height: '75%' }}></div>
-                  <div className="bar" style={{ height: '90%' }}></div>
-                  <div className="bar" style={{ height: '85%' }}></div>
-                  <div className="bar" style={{ height: '100%' }}></div>
+        {/* Right Side - Chat Section */}
+        <div className="chat-section">
+          <div className="chat-container">
+            <div className="chat-header-section">
+              <div className="caretaker-profile">
+                <div className="caretaker-avatar">👤</div>
+                <div className="caretaker-info">
+                  <h4>Property Manager</h4>
+                  <span className="online-indicator">🟢 Online now</span>
                 </div>
-                <p className="chart-label">Last 5 Months</p>
               </div>
             </div>
 
-            <div className="analytics-card">
-              <h3>Occupancy Rate</h3>
-              <div className="chart-placeholder">
-                <div className="donut-chart">
-                  <div className="donut-value">
-                    {apartments.length > 0 
-                      ? Math.round((occupiedCount / apartments.length) * 100) 
-                      : 0
-                    }%
+            <div className="chat-messages-area">
+              {messages.map((message) => (
+                <div key={message.id} className={`chat-message ${message.sender}`}>
+                  <div className="message-content">
+                    <p>{message.text}</p>
+                    <span className="message-timestamp">
+                      {message.timestamp.toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                      })}
+                    </span>
                   </div>
                 </div>
-                <p className="chart-label">Current Occupancy</p>
-              </div>
+              ))}
+              
+              {isTyping && (
+                <div className="chat-message caretaker">
+                  <div className="message-content typing">
+                    <div className="typing-dots">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="quick-actions">
+              <button 
+                className="quick-action-btn"
+                onClick={() => {
+                  setInputMessage("Schedule a viewing");
+                  setTimeout(handleSendMessage, 100);
+                }}
+              >
+                📅 Schedule Viewing
+              </button>
+              <button 
+                className="quick-action-btn"
+                onClick={() => {
+                  setInputMessage("What's included?");
+                  setTimeout(handleSendMessage, 100);
+                }}
+              >
+                ❓ What's Included
+              </button>
+            </div>
+
+            <div className="chat-input-area">
+              <input
+                type="text"
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                placeholder="Type your message..."
+                className="chat-input-field"
+              />
+              <button 
+                className="chat-send-btn"
+                onClick={handleSendMessage}
+                disabled={!inputMessage.trim()}
+              >
+                <span>➤</span>
+              </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Payment Modal */}
+      {showPayment && (
+        <div className="payment-modal-overlay" onClick={() => setShowPayment(false)}>
+          <div className="payment-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowPayment(false)}>✕</button>
+            <h2>Pay for Property Access</h2>
+            <p className="modal-subtitle">Secure payment via blockchain</p>
+            
+            <div className="payment-details">
+              <div className="payment-row">
+                <span>Property</span>
+                <span>{property.houseName || property.title}</span>
+              </div>
+              <div className="payment-row">
+                <span>Access Fee</span>
+                <span>0.1 SUI</span>
+              </div>
+              <div className="payment-row total">
+                <span>Total</span>
+                <span>0.1 SUI</span>
+              </div>
+            </div>
+
+            <button className="btn-confirm-payment">
+              <span>💳</span>
+              <span>Confirm Payment</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

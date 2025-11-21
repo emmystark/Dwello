@@ -3,27 +3,8 @@ import DashboardOverview from './DashboardOverview'
 import MyInventory from './MyInventory'
 import AddNewListing from './AddNewListing'
 import PropertyDetails from './PropertyDetails'
+import type { Property } from '../types'
 import '../styles/Dashboard.css'
-
-interface Property {
-  id: string
-  houseName: string
-  address: string
-  apartments: Apartment[]
-  totalEarnings: number
-  images: string[]
-  pricing: string
-}
-
-interface Apartment {
-  id: string
-  number: number
-  tenant: string | null
-  possessionDate: string
-  expiryDate: string
-  pricing: string
-  status: 'occupied' | 'vacant'
-}
 
 const CaretakerDashboard = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'addNew'>('overview')
@@ -118,7 +99,7 @@ const CaretakerDashboard = () => {
       <div className="dashboard-sidebar">
         <div className="sidebar-header">
           <div className="logo">
-            <span className="logo-icon"></span>
+            <span className="logo-icon">🏢</span>
             <h2>Caretaker</h2>
           </div>
         </div>
