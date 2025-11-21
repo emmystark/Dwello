@@ -47,12 +47,3 @@ module rental_marketplace::caretaker_earnings;
         *table::borrow_mut(&mut store.balances, caretaker) = updated;
         event::emit(EarningsAdded { caretaker, delta: amount, new_total: updated });
     }
-
-    /// Returns the caretaker's accumulated earnings.
-    public fun get_balance(store: &CaretakerEarnings, caretaker: address): u64 {
-        if (table::contains(&store.balances, caretaker)) {
-            *table::borrow(&store.balances, caretaker)
-        } else {
-            0
-        }
-    }
