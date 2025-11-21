@@ -85,13 +85,13 @@ const LocationSelector = ({ onLocationSelect, selectedLocation }: LocationSelect
   return (
     <div className="location-selector">
       <div className="selector-header">
-        <h2>🌍 Search Properties Worldwide</h2>
+        <h2>Search Properties Worldwide</h2>
         <p className="subtitle">Select your desired location to find blockchain-verified properties</p>
       </div>
       
       <div className="selector-grid">
         <div className="selector-card">
-          <label>🌐 Country</label>
+          <label>Country</label>
           <select value={selectedCountry} onChange={handleCountryChange}>
             <option value="">Select Country</option>
             {countries.map(country => (
@@ -102,7 +102,7 @@ const LocationSelector = ({ onLocationSelect, selectedLocation }: LocationSelect
 
         {selectedCountry && availableStates.length > 0 && (
           <div className="selector-card fade-in">
-            <label>📍 State / Region</label>
+            <label>State / Region</label>
             <select value={selectedState} onChange={handleStateChange}>
               <option value="">Select State/Region</option>
               {availableStates.map(state => (
@@ -114,7 +114,7 @@ const LocationSelector = ({ onLocationSelect, selectedLocation }: LocationSelect
 
         {selectedState && availableCities.length > 0 && (
           <div className="selector-card fade-in">
-            <label>🏙️ City / Area</label>
+            <label>City / Area</label>
             <select value={selectedLocation.city || ''} onChange={handleCityChange}>
               <option value="">Select City/Area</option>
               {availableCities.map(city => (
@@ -129,19 +129,19 @@ const LocationSelector = ({ onLocationSelect, selectedLocation }: LocationSelect
         <div className="map-placeholders fade-in">
           {selectedCountry && (
             <div className="map-placeholder">
-              <div className="map-icon">🗺️</div>
+              <div className="map-icon"></div>
               <p>{selectedCountry}</p>
             </div>
           )}
           {selectedState && (
             <div className="map-placeholder">
-              <div className="map-icon">📍</div>
+              <div className="map-icon"></div>
               <p>{selectedState}</p>
             </div>
           )}
           {selectedLocation.city && (
             <div className="map-placeholder">
-              <div className="map-icon">🏙️</div>
+              <div className="map-icon"></div>
               <p>{selectedLocation.city}</p>
             </div>
           )}

@@ -27,75 +27,9 @@ interface PropertyListProps {
   location?: Location;
 }
 
-/*const generateFallbackProperties = (location: Location = {}): Property[] => {
-  const country = location.country || "Unknown";
-  const state = location.state || "";
-  const city = location.city || "";
-
-  const currencyMap: Record<string, string> = {
-    "United States": "$",
-    "United Kingdom": "£",
-    Canada: "CAD$",
-    Australia: "AUD$",
-    Germany: "€",
-    France: "€",
-    Spain: "€",
-    Italy: "€",
-    Nigeria: "₦",
-    "United Arab Emirates": "AED",
-    Japan: "¥",
-    India: "₹",
-    Brazil: "R$",
-  };
-  const currency = currencyMap[country] || "$";
-
-  const priceRanges: Record<string, [number, number]> = {
-    "United States": [250000, 2000000],
-    "United Kingdom": [200000, 1500000],
-    Nigeria: [15000000, 120000000],
-    "United Arab Emirates": [500000, 5000000],
-    Germany: [180000, 900000],
-    Australia: [350000, 2500000],
-    Canada: [300000, 1800000],
-    France: [200000, 1200000],
-  };
-  const [minPrice, maxPrice] = priceRanges[country] || [100000, 1000000];
-
-  const propertyTypes = [
-    "Apartment",
-    "House",
-    "Villa",
-    "Condo",
-    "Townhouse",
-    "Duplex",
-    "Penthouse",
-  ];
-
-  const properties: Property[] = [];
-
-  for (let i = 0; i < 8; i++) {
-    const bedrooms = Math.floor(Math.random() * 4) + 1;
-    const bathrooms = Math.floor(Math.random() * 3) + 1;
-    const sqm = Math.floor(Math.random() * 200) + 50;
-    const price = Math.floor(Math.random() * (maxPrice - minPrice) + minPrice);
-    const type = propertyTypes[Math.floor(Math.random() * propertyTypes.length)];
-
-    properties.push({
-      id: `prop_${i + 1}_${Date.now()}`,
-      title: `${bedrooms} Bedroom ${type}`,
-      location: `${city || state}, ${country}`,
-      price: price.toLocaleString(),
-      currency,
-      bedrooms,
-      bathrooms,
-      area: `${sqm} sqm`,
-      type,
-      walrusId: `walrus_${Math.random().toString(36).substring(2, 15)}`,
-      imageUrl: '/downloaded-logo.jpg', // Always use local fallback
-    });
-  }
-  return properties;
-}; */
+const handleCardClick = (propertyId: string) => {
+  router.push(`/property/${propertyId}`);
+};
 
 const generateMockProperties = async (location: Location = {}): Promise<Property[]> => {
   const country = location.country || "Unknown";
@@ -230,10 +164,10 @@ const PropertyList = ({ location }: PropertyListProps) => {
       <div className="list-header">
         <h2>Available Properties</h2>
         <p className="location-display">
-          📍 {location.city || location.state || "Unknown"}, {location.country || "Unknown"}
+       {location.city || location.state || "Unknown"}, {location.country || "Unknown"}
         </p>
         <p className="results-count">
-          ✓ {properties.length} properties verified on Walrus ledger
+           {properties.length} properties verified on Walrus ledger
         </p>
       </div>
 
@@ -254,7 +188,7 @@ const PropertyList = ({ location }: PropertyListProps) => {
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = "none";
                     }}
-                    style={{ opacity: 0, transition: "opacity 0.5s" }}
+                    style={{ opacity: 0, height:200, width: '100%', transition: "opacity 0.5s" }}
                   />
                 ) : (
                   <div className="image-icon">🏠</div>
@@ -266,7 +200,7 @@ const PropertyList = ({ location }: PropertyListProps) => {
 
             <div className="property-details">
               <h3>{property.title}</h3>
-              <p className="location">📍 {property.location}</p>
+              <p className="location"> {property.location}</p>
               <p className="price">
                 {property.currency}
                 {property.price}
@@ -282,7 +216,15 @@ const PropertyList = ({ location }: PropertyListProps) => {
                   ID: {property.walrusId.substring(0, 12)}...
                 </small>
               </div>
-              <button className="view-btn">View Details</button>
+              <button 
+                className="view-btn" 
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent double navigation
+                  handleCardClick(property.id);
+                }}
+              >
+                View Details →
+              </button>
             </div>
           </div>
         ))}
