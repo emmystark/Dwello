@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { getWalrusBlobUrl } from '../walrus/client';
 import bedroomBlobIds from '../walrus/bloblds';
-
+import { useNavigate } from "react-router-dom";
 
 interface Location {
   country?: string;
@@ -26,10 +26,6 @@ interface Property {
 interface PropertyListProps {
   location?: Location;
 }
-
-const handleCardClick = (propertyId: string) => {
-  router.push(`/property/${propertyId}`);
-};
 
 const generateMockProperties = async (location: Location = {}): Promise<Property[]> => {
   const country = location.country || "Unknown";
@@ -93,11 +89,6 @@ const generateMockProperties = async (location: Location = {}): Promise<Property
     console.warn("Failed to load shared Walrus image:", error);
   }
 
-  // Fallback to local image if blob loading fails
-  /*if (!sharedImageUrl) {
-    sharedImageUrl = '/downloaded-logo.jpg';
-  }*/
-
   for (let i = 0; i < 8; i++) {
     const bedrooms = Math.floor(Math.random() * 4) + 1;
     const bathrooms = Math.floor(Math.random() * 3) + 1;
@@ -125,6 +116,7 @@ const generateMockProperties = async (location: Location = {}): Promise<Property
 const PropertyList = ({ location }: PropertyListProps) => {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   if (!location) return null;
 
@@ -138,15 +130,27 @@ const PropertyList = ({ location }: PropertyListProps) => {
         setProperties(props);
       } catch (error) {
         console.error("Error generating properties:", error);
-        // Generate properties without images if blob loading fails completely
-        /*const fallbackProps = generateFallbackProperties(location);
-        setProperties(fallbackProps);*/
       } finally {
         setLoading(false);
       }
     }, 1500);
     return () => clearTimeout(timer);
   }, [location]);
+
+  // Handle property card click to navigate to property details
+  const handlePropertyClick = (property: Property) => {
+    navigate('/propertydetails', { 
+      state: { property } 
+    });
+  };
+
+  // Handle view details button click
+  const handleViewDetails = (property: Property, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click event from firing
+    navigate('/propertydetails', { 
+      state: { property } 
+    });
+  };
 
   if (loading) {
     return (
@@ -164,16 +168,21 @@ const PropertyList = ({ location }: PropertyListProps) => {
       <div className="list-header">
         <h2>Available Properties</h2>
         <p className="location-display">
-       {location.city || location.state || "Unknown"}, {location.country || "Unknown"}
+          {location.city || location.state || "Unknown"}, {location.country || "Unknown"}
         </p>
         <p className="results-count">
-           {properties.length} properties verified on Walrus ledger
+          {properties.length} properties verified on Walrus ledger
         </p>
       </div>
 
       <div className="properties-grid">
         {properties.map((property) => (
-          <div key={property.id} className="property-card">
+          <div 
+            key={property.id} 
+            className="property-card"
+            onClick={() => handlePropertyClick(property)}
+            style={{ cursor: 'pointer' }}
+          >
             <div className="property-image">
               <div className="placeholder-image">
                 <span className="property-type">{property.type}</span>
@@ -216,14 +225,12 @@ const PropertyList = ({ location }: PropertyListProps) => {
                   ID: {property.walrusId.substring(0, 12)}...
                 </small>
               </div>
+              
               <button 
-                className="view-btn" 
-                onClick={(e) => {
-                  e.stopPropagation(); // Prevent double navigation
-                  handleCardClick(property.id);
-                }}
+                className="view-btn"
+                onClick={(e) => handleViewDetails(property, e)}
               >
-                View Details →
+                View Details
               </button>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import CaretakerChat from './CaretakerChat'
+import CaretakerChat from './CaretakerChat.tsx'
 import '../styles/PropertyDetail.css'
 
 interface PropertyDetailViewProps {

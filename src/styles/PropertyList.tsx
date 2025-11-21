@@ -136,7 +136,7 @@ const PropertyList = ({ location }: PropertyListProps) => {
             
             <div className="property-details">
               <h3>{property.title}</h3>
-              <p className="location">📍 {property.location}</p>
+              <p className="location">{property.location}</p>
               <p className="price">
                 {property.currency}{property.price}
               </p>

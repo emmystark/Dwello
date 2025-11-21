@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import LocationSelector from './components/LocationSelector'
 import PropertyList from './components/PropertyList'
+import PropertyDetails from './components/PropertyDetails'
 import CaretakerDashboard from './components/CaretakerDashboard'
 import { useSui } from './sui/SuiProviders'
 import './styles/App.css'
@@ -11,7 +13,7 @@ interface Location {
   city?: string
 }
 
-function App() {
+function AppContent() {
   const [selectedLocation, setSelectedLocation] = useState<Location>({})
   const [viewMode, setViewMode] = useState<'customer' | 'caretaker'>('customer')
   const { isConnected, connect } = useSui()
@@ -28,9 +30,8 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div className="header-content">
-          {/* <p className="header-subtitle">Powered by Sui & Walrus</p> */}
           <a href=".">
-          <img src="./logo.png" alt="logo"/>
+            <img src="./logo.png" alt="logo"/>
           </a>
         </div>
         <div className="header-actions-group">
@@ -78,6 +79,18 @@ function App() {
         <p>Built on Sui Network • Data stored on Walrus</p>
       </footer>
     </div>
+  )
+}
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<AppContent />} />
+        <Route path="/propertydetails" element={<PropertyDetails />} />
+        {/* Add other routes as needed */}
+      </Routes>
+    </Router>
   )
 }
 

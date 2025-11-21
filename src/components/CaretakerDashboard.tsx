@@ -118,7 +118,7 @@ const CaretakerDashboard = () => {
       <div className="dashboard-sidebar">
         <div className="sidebar-header">
           <div className="logo">
-            <span className="logo-icon">🏢</span>
+            <span className="logo-icon"></span>
             <h2>Caretaker</h2>
           </div>
         </div>
