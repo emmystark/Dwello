@@ -21,7 +21,6 @@ module rental_marketplace::payment {
         id: UID,
         user: address,
         house_id: ID,
-        paid_at: u64,
         amount: u64,
     }
 
@@ -44,7 +43,6 @@ module rental_marketplace::payment {
         mut coin_in: Coin<USDC>,
         target_house: &mut house::House,
         earnings_store: &mut caretaker_earnings::CaretakerEarnings,
-        paid_at: u64,
         ctx: &mut TxContext
     ) {
         let sender = ctx.sender();
@@ -87,7 +85,6 @@ module rental_marketplace::payment {
             id: object::new(ctx),
             user: sender,
             house_id,
-            paid_at,
             amount: PAYMENT_AMOUNT,
         };
         transfer::transfer(pass, sender);

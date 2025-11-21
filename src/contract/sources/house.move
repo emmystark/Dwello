@@ -42,7 +42,6 @@ public entry fun create_house(
     pricing: u8,
     bedroom: u8,
     bathroom: u8,
-    total_views: u64,
     ctx: &mut TxContext
 ) {
     let house = House {
@@ -66,7 +65,7 @@ public entry fun create_house(
         caretaker,
     });
 
-    transfer::transfer(house, ctx.sender());
+    transfer::share_object(house);
 }
 
 public fun increment_views(house: &mut House) {
@@ -76,3 +75,14 @@ public fun increment_views(house: &mut House) {
 public fun get_caretaker(house: &House): address {
         house.caretaker
     }
+
+public entry fun addCaretaker(_: &CaretakerCap, caretaker: address, ctx: &mut TxContext) {
+    transfer::transfer(
+        CaretakerCap {
+            id: object::new(ctx)
+        },
+        caretaker
+    )
+}
+
+
