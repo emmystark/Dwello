@@ -554,7 +554,7 @@
     .listing-form {
       padding: 1.5rem;
     }
-  
+
     .form-grid {
       grid-template-columns: 1fr;
     }
@@ -572,4 +572,9 @@
       width: 100%;
       justify-content: center;
     }
+  }
+
+
+  .listing-form input:focus {
+    color: black;
   }

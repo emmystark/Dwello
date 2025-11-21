@@ -68,7 +68,7 @@ const PropertyDetailView = ({ property, onBack }: PropertyDetailViewProps) => {
                 <h1>{property.title}</h1>
                 <span className="property-type-badge">{property.type}</span>
               </div>
-              <p className="property-location-detail">📍 {property.location}</p>
+              <p className="property-location-detail"> {property.location}</p>
             </div>
 
             <div className="price-section">

@@ -218,7 +218,7 @@ const PropertyDetails = ({ property: propProperty, onBack }: PropertyDetailsProp
 
             <div className="hero-content">
               <h1 className="property-title">{property.houseName || property.title}</h1>
-              <p className="property-location">📍 {property.address || property.location}</p>
+              <p className="property-location"> {property.address || property.location}</p>
 
               <div className="property-badges">
                 <span className="badge">🛏️ {bedrooms} Bedroom{bedrooms > 1 ? 's' : ''}</span>

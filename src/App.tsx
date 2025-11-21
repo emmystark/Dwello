@@ -31,7 +31,7 @@ function AppContent() {
       <header className="app-header">
         <div className="header-content">
           <a href=".">
-            <img src="./logo.png" alt="logo"/>
+          <img src="./logo.png" style={{ height: '80px', width: '110px' }} alt="logo" />
           </a>
         </div>
         <div className="header-actions-group">

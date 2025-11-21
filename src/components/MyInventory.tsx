@@ -42,7 +42,7 @@ const MyInventory = ({ properties, onViewDetails }: MyInventoryProps) => {
 
               <div className="inventory-details">
                 <h3 className="property-name">{property.houseName}</h3>
-                <p className="property-address">📍 {property.address}</p>
+                <p className="property-address"> {property.address}</p>
 
                 <div className="property-stats">
                   <div className="stat-item">

@@ -116,7 +116,7 @@ const PropertyList = ({ location }: PropertyListProps) => {
       <div className="list-header">
         <h2>Available Properties</h2>
         <p className="location-display">
-          📍 {location.city || location.state}, {location.country}
+           {location.city || location.state}, {location.country}
         </p>
         <p className="results-count">
           ✓ {properties.length} properties verified on Walrus ledger
