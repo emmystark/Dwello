@@ -32,7 +32,7 @@ export const getWalrusBlobUrl = async (blobId: string): Promise<string | null> =
   try {
     // Try direct HTTP fetch first (faster)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 5 second timeout
 
     const response = await fetch(`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${blobId}`, {
       method: 'GET',
