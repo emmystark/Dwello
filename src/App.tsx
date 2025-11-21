@@ -2,6 +2,7 @@ import { useState } from 'react';
 import LocationSelector from './components/LocationSelector';
 import PropertyList from './components/PropertyList';
 import './styles/App.css';
+import {suiClient} from './walrus/client.ts'
 
 // ──────────────────────────────────────────────────────────────
 // Official Sui dApp Kit (2025) – Wallet + QueryClient
@@ -81,10 +82,10 @@ function AppContent() {
 // ──────────────────────────────────────────────────────────────
 // Root App with all required providers
 // ──────────────────────────────────────────────────────────────
+export const networks = {
+  testnet: { url: getFullnodeUrl('testnet') },
+};
 export default function App() {
-  const networks = {
-    testnet: { url: getFullnodeUrl('testnet') },
-  };
 
   return (
     <QueryClientProvider client={queryClient}>

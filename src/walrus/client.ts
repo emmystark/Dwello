@@ -2,6 +2,10 @@
 import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
 import { WalrusClient } from '@mysten/walrus';
 
+export const suiClient = new SuiClient({
+ url: getFullnodeUrl('testnet'),
+});
+
 // Cache for blob URLs to avoid re-fetching
 const blobUrlCache = new Map<string, string>();
 let walrusClient: WalrusClient | null = null;
@@ -10,9 +14,6 @@ let walrusClient: WalrusClient | null = null;
 const initWalrusClient = async (): Promise<WalrusClient> => {
   if (walrusClient) return walrusClient;
 
-  const suiClient = new SuiClient({
-    url: getFullnodeUrl('testnet'),
-  });
 
   walrusClient = new WalrusClient({
     network: 'testnet',
@@ -32,7 +33,7 @@ export const getWalrusBlobUrl = async (blobId: string): Promise<string | null> =
   try {
     // Try direct HTTP fetch first (faster)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 5 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
     const response = await fetch(`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${blobId}`, {
       method: 'GET',
