@@ -34,7 +34,7 @@ export const getWalrusBlobUrl = async (blobId: string): Promise<string | null> =
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-    const response = await fetch(`https://walrus.testnet.mystenlabs.com/v1/blobs/${blobId}/content`, {
+    const response = await fetch(`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${blobId}`, {
       method: 'GET',
       headers: {
         'Accept': '*/*',
@@ -60,10 +60,10 @@ export const getWalrusBlobUrl = async (blobId: string): Promise<string | null> =
   // Fallback to WalrusClient if direct fetch fails
   try {
     const client = await initWalrusClient();
-    const blobData = await client.readBlob(blobId);
-    
+    const blobData = await client.readBlob({ blobId });
+
     if (blobData) {
-      const blob = new Blob([blobData]);
+      const blob = new Blob([blobData as any]);
       const blobUrl = URL.createObjectURL(blob);
       
       // Cache the blob URL

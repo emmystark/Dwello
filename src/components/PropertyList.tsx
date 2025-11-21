@@ -27,7 +27,7 @@ interface PropertyListProps {
   location?: Location;
 }
 
-const generateFallbackProperties = (location: Location = {}): Property[] => {
+/*const generateFallbackProperties = (location: Location = {}): Property[] => {
   const country = location.country || "Unknown";
   const state = location.state || "";
   const city = location.city || "";
@@ -95,7 +95,7 @@ const generateFallbackProperties = (location: Location = {}): Property[] => {
     });
   }
   return properties;
-};
+}; */
 
 const generateMockProperties = async (location: Location = {}): Promise<Property[]> => {
   const country = location.country || "Unknown";
@@ -160,9 +160,9 @@ const generateMockProperties = async (location: Location = {}): Promise<Property
   }
 
   // Fallback to local image if blob loading fails
-  if (!sharedImageUrl) {
+  /*if (!sharedImageUrl) {
     sharedImageUrl = '/downloaded-logo.jpg';
-  }
+  }*/
 
   for (let i = 0; i < 8; i++) {
     const bedrooms = Math.floor(Math.random() * 4) + 1;
@@ -182,7 +182,7 @@ const generateMockProperties = async (location: Location = {}): Promise<Property
       area: `${sqm} sqm`,
       type,
       walrusId: `walrus_${Math.random().toString(36).substring(2, 15)}`,
-      imageUrl: sharedImageUrl || undefined,
+      imageUrl: bedrooms === 1 ? sharedImageUrl || undefined : undefined,
     });
   }
   return properties;
@@ -205,8 +205,8 @@ const PropertyList = ({ location }: PropertyListProps) => {
       } catch (error) {
         console.error("Error generating properties:", error);
         // Generate properties without images if blob loading fails completely
-        const fallbackProps = generateFallbackProperties(location);
-        setProperties(fallbackProps);
+        /*const fallbackProps = generateFallbackProperties(location);
+        setProperties(fallbackProps);*/
       } finally {
         setLoading(false);
       }
@@ -241,24 +241,24 @@ const PropertyList = ({ location }: PropertyListProps) => {
         {properties.map((property) => (
           <div key={property.id} className="property-card">
             <div className="property-image">
-              {property.imageUrl && (
-                <img
-                  src={property.imageUrl}
-                  alt={property.title}
-                  className="walrus-image"
-                  onLoad={(e) => {
-                    (e.target as HTMLImageElement).style.opacity = "1";
-                  }}
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = "none";
-                  }}
-                  style={{ opacity: 0, transition: "opacity 0.5s" }}
-                />
-              )}
-
               <div className="placeholder-image">
                 <span className="property-type">{property.type}</span>
-                <div className="image-icon">🏠</div>
+                {property.imageUrl ? (
+                  <img
+                    src={property.imageUrl}
+                    alt={property.title}
+                    className="walrus-image"
+                    onLoad={(e) => {
+                      (e.target as HTMLImageElement).style.opacity = "1";
+                    }}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = "none";
+                    }}
+                    style={{ opacity: 0, transition: "opacity 0.5s" }}
+                  />
+                ) : (
+                  <div className="image-icon">🏠</div>
+                )}
               </div>
 
               <div className="property-badge">✓ Verified</div>
