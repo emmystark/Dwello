@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { getWalrusBlobUrl } from '../walrus/client';
 import bedroomBlobIds from '../walrus/bloblds';
-
+import { useNavigate } from "react-router-dom";
 
 interface Location {
   country?: string;
@@ -26,76 +26,6 @@ interface Property {
 interface PropertyListProps {
   location?: Location;
 }
-
-/*const generateFallbackProperties = (location: Location = {}): Property[] => {
-  const country = location.country || "Unknown";
-  const state = location.state || "";
-  const city = location.city || "";
-
-  const currencyMap: Record<string, string> = {
-    "United States": "$",
-    "United Kingdom": "£",
-    Canada: "CAD$",
-    Australia: "AUD$",
-    Germany: "€",
-    France: "€",
-    Spain: "€",
-    Italy: "€",
-    Nigeria: "₦",
-    "United Arab Emirates": "AED",
-    Japan: "¥",
-    India: "₹",
-    Brazil: "R$",
-  };
-  const currency = currencyMap[country] || "$";
-
-  const priceRanges: Record<string, [number, number]> = {
-    "United States": [250000, 2000000],
-    "United Kingdom": [200000, 1500000],
-    Nigeria: [15000000, 120000000],
-    "United Arab Emirates": [500000, 5000000],
-    Germany: [180000, 900000],
-    Australia: [350000, 2500000],
-    Canada: [300000, 1800000],
-    France: [200000, 1200000],
-  };
-  const [minPrice, maxPrice] = priceRanges[country] || [100000, 1000000];
-
-  const propertyTypes = [
-    "Apartment",
-    "House",
-    "Villa",
-    "Condo",
-    "Townhouse",
-    "Duplex",
-    "Penthouse",
-  ];
-
-  const properties: Property[] = [];
-
-  for (let i = 0; i < 8; i++) {
-    const bedrooms = Math.floor(Math.random() * 4) + 1;
-    const bathrooms = Math.floor(Math.random() * 3) + 1;
-    const sqm = Math.floor(Math.random() * 200) + 50;
-    const price = Math.floor(Math.random() * (maxPrice - minPrice) + minPrice);
-    const type = propertyTypes[Math.floor(Math.random() * propertyTypes.length)];
-
-    properties.push({
-      id: `prop_${i + 1}_${Date.now()}`,
-      title: `${bedrooms} Bedroom ${type}`,
-      location: `${city || state}, ${country}`,
-      price: price.toLocaleString(),
-      currency,
-      bedrooms,
-      bathrooms,
-      area: `${sqm} sqm`,
-      type,
-      walrusId: `walrus_${Math.random().toString(36).substring(2, 15)}`,
-      imageUrl: '/downloaded-logo.jpg', // Always use local fallback
-    });
-  }
-  return properties;
-}; */
 
 const generateMockProperties = async (location: Location = {}): Promise<Property[]> => {
   const country = location.country || "Unknown";
@@ -159,11 +89,6 @@ const generateMockProperties = async (location: Location = {}): Promise<Property
     console.warn("Failed to load shared Walrus image:", error);
   }
 
-  // Fallback to local image if blob loading fails
-  /*if (!sharedImageUrl) {
-    sharedImageUrl = '/downloaded-logo.jpg';
-  }*/
-
   for (let i = 0; i < 8; i++) {
     const bedrooms = Math.floor(Math.random() * 4) + 1;
     const bathrooms = Math.floor(Math.random() * 3) + 1;
@@ -191,6 +116,7 @@ const generateMockProperties = async (location: Location = {}): Promise<Property
 const PropertyList = ({ location }: PropertyListProps) => {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   if (!location) return null;
 
@@ -204,15 +130,27 @@ const PropertyList = ({ location }: PropertyListProps) => {
         setProperties(props);
       } catch (error) {
         console.error("Error generating properties:", error);
-        // Generate properties without images if blob loading fails completely
-        /*const fallbackProps = generateFallbackProperties(location);
-        setProperties(fallbackProps);*/
       } finally {
         setLoading(false);
       }
     }, 1500);
     return () => clearTimeout(timer);
   }, [location]);
+
+  // Handle property card click to navigate to property details
+  const handlePropertyClick = (property: Property) => {
+    navigate('/propertydetails', { 
+      state: { property } 
+    });
+  };
+
+  // Handle view details button click
+  const handleViewDetails = (property: Property, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click event from firing
+    navigate('/propertydetails', { 
+      state: { property } 
+    });
+  };
 
   if (loading) {
     return (
@@ -230,16 +168,21 @@ const PropertyList = ({ location }: PropertyListProps) => {
       <div className="list-header">
         <h2>Available Properties</h2>
         <p className="location-display">
-          📍 {location.city || location.state || "Unknown"}, {location.country || "Unknown"}
+          {location.city || location.state || "Unknown"}, {location.country || "Unknown"}
         </p>
         <p className="results-count">
-          ✓ {properties.length} properties verified on Walrus ledger
+          {properties.length} properties verified on Walrus ledger
         </p>
       </div>
 
       <div className="properties-grid">
         {properties.map((property) => (
-          <div key={property.id} className="property-card">
+          <div 
+            key={property.id} 
+            className="property-card"
+            onClick={() => handlePropertyClick(property)}
+            style={{ cursor: 'pointer' }}
+          >
             <div className="property-image">
               <div className="placeholder-image">
                 <span className="property-type">{property.type}</span>
@@ -254,7 +197,7 @@ const PropertyList = ({ location }: PropertyListProps) => {
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = "none";
                     }}
-                    style={{ opacity: 0, transition: "opacity 0.5s" }}
+                    style={{ opacity: 0, height:200, width: '100%', transition: "opacity 0.5s" }}
                   />
                 ) : (
                   <div className="image-icon">🏠</div>
@@ -266,7 +209,7 @@ const PropertyList = ({ location }: PropertyListProps) => {
 
             <div className="property-details">
               <h3>{property.title}</h3>
-              <p className="location">📍 {property.location}</p>
+              <p className="location"> {property.location}</p>
               <p className="price">
                 {property.currency}
                 {property.price}
@@ -282,7 +225,13 @@ const PropertyList = ({ location }: PropertyListProps) => {
                   ID: {property.walrusId.substring(0, 12)}...
                 </small>
               </div>
-              <button className="view-btn">View Details</button>
+              
+              <button 
+                className="view-btn"
+                onClick={(e) => handleViewDetails(property, e)}
+              >
+                View Details
+              </button>
             </div>
           </div>
         ))}
