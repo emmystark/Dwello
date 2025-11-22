@@ -575,6 +575,6 @@
   }
 
 
-  .listing-form input:focus {
+  .listing-form input:focus, .listing-form input  {
     color: black;
   }

@@ -200,7 +200,7 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
               <div className="form-group">
                 <label>Default Pricing (per year) *</label>
                 <input
-                  type="text"
+                  type="number"
                   name="pricing"
                   value={formData.pricing}
                   onChange={handleInputChange}

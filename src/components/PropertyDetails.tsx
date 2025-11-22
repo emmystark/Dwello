@@ -231,14 +231,14 @@ const PropertyDetails = ({ property: propProperty, onBack }: PropertyDetailsProp
                 <div className="price-main">
                   <span className="price-label">Price</span>
                   <span className="price-amount">
-                    {property.currency || '$'}{property.price || property.pricing}
+                    {property.currency || ''}{property.price || property.pricing}
                   </span>
                   <span className="price-period">per year</span>
                 </div>
-                <button className="btn-pay-access" onClick={handlePayForAccess}>
+                {/* <button className="btn-pay-access" onClick={handlePayForAccess}>
                   <span>💳</span>
                   <span>Pay for Access</span>
-                </button>
+                </button> */}
               </div>
 
               <div className="property-stats-grid">
