@@ -1,0 +1,5 @@
+# One Sui address per line, lowercase
+# Example:
+# 0x1234abcd...
+0xda140be42f5a8ec39cd1a6f9eb4c48de1054ea0835062812da013bb6ba763f2f
+0xad9f37ea25a12d3d4db6035981c8d140818789e373baa4980a3c9799592d5157
