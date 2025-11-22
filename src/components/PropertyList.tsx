@@ -32,6 +32,55 @@ const generateMockProperties = async (location: Location = {}): Promise<Property
   const state = location.state || "";
   const city = location.city || "";
 
+  let publicListings: Property[] = [];
+  try {
+    const raw = localStorage.getItem('dwelloListings');
+    if (raw) {
+      const stored = JSON.parse(raw) as any[];
+
+      const normalize = (value: string | undefined | null) =>
+        (value || '').trim().toLowerCase();
+
+      const normCountry = normalize(country);
+      const normState = normalize(state);
+      const normCity = normalize(city);
+
+      publicListings = stored
+        .filter((p) => {
+          const pCountry = normalize(p.country);
+          const pState = normalize(p.state);
+          const pCity = normalize(p.city);
+
+          if (normCity) {
+            // If a city is selected, require full country+state+city match
+            return (
+              pCountry === normCountry &&
+              pState === normState &&
+              pCity === normCity
+            );
+          }
+
+          // If no city is selected, match by country+state only
+          return pCountry === normCountry && pState === normState;
+        })
+        .map((p) => ({
+          id: p.id,
+          title: p.title,
+          location: p.location,
+          price: p.price,
+          currency: p.currency,
+          bedrooms: p.bedrooms,
+          bathrooms: p.bathrooms,
+          area: p.area,
+          type: p.type,
+          walrusId: p.walrusId,
+          imageUrl: p.imageUrl,
+        }));
+    }
+  } catch (error) {
+    console.warn('Failed to load public listings:', error);
+  }
+
   const currencyMap: Record<string, string> = {
     "United States": "$",
     "United Kingdom": "£",
@@ -71,22 +120,26 @@ const generateMockProperties = async (location: Location = {}): Promise<Property
     "Penthouse",
   ];
 
-  const properties: Property[] = [];
+  const properties: Property[] = [...publicListings];
+  // Prepare Walrus-backed images for each bedroom count
+  const walrusImageUrls: Record<number, string | null> = {
+    1: null,
+    2: null,
+    3: null,
+    4: null,
+  };
 
-  // Fetch the single blob URL once for all properties
-  let sharedImageUrl: string | null = null;
   try {
-    // Use the first available blob ID from 1bedroom.txt
-    const availableBlobIds = bedroomBlobIds[1] || [];
-    if (availableBlobIds.length > 0) {
-      // Extract the blob ID from the first entry (format: "room: blobId")
-      const firstEntry = availableBlobIds[0];
-      const blobId = firstEntry.includes(': ') ? firstEntry.split(': ')[1] : firstEntry;
-      console.log('Using blob ID:', blobId);
-      sharedImageUrl = await getWalrusBlobUrl(blobId);
+    for (const count of [1, 2, 3, 4]) {
+      const availableBlobIds = bedroomBlobIds[count] || [];
+      if (availableBlobIds.length > 0) {
+        const firstEntry = availableBlobIds[0];
+        const blobId = firstEntry.includes(': ') ? firstEntry.split(': ')[1] : firstEntry;
+        walrusImageUrls[count] = getWalrusBlobUrl(blobId);
+      }
     }
   } catch (error) {
-    console.warn("Failed to load shared Walrus image:", error);
+    console.warn("Failed to load Walrus images for bedrooms:", error);
   }
 
   for (let i = 0; i < 8; i++) {
@@ -107,7 +160,7 @@ const generateMockProperties = async (location: Location = {}): Promise<Property
       area: `${sqm} sqm`,
       type,
       walrusId: `walrus_${Math.random().toString(36).substring(2, 15)}`,
-      imageUrl: bedrooms === 1 ? sharedImageUrl || undefined : undefined,
+      imageUrl: walrusImageUrls[bedrooms] || undefined,
     });
   }
   return properties;
@@ -241,3 +294,4 @@ const PropertyList = ({ location }: PropertyListProps) => {
 };
 
 export default PropertyList;
+

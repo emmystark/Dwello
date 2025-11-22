@@ -4,6 +4,8 @@ import { getWalrusBlobUrl } from '../walrus/client';
 import bedroomBlobIds from '../walrus/bloblds';
 import type { Property, Message } from '../types';
 import '../styles/PropertyDetails.css';
+import { useDwelloPayments } from '../payment';
+import { useSui } from '../sui/SuiProviders';
 
 interface PropertyDetailsProps {
   property?: Property;
@@ -13,6 +15,8 @@ interface PropertyDetailsProps {
 const PropertyDetails = ({ property: propProperty, onBack }: PropertyDetailsProps) => {
   const location = useLocation();
   const property = propProperty || (location.state?.property as Property);
+  const { account } = useSui();
+  const { payforaccess } = useDwelloPayments();
   
   const [propertyImages, setPropertyImages] = useState<string[]>([]);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -29,6 +33,145 @@ const PropertyDetails = ({ property: propProperty, onBack }: PropertyDetailsProp
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
+  const [hasAccess, setHasAccess] = useState(false);
+  const [accessExpiresAt, setAccessExpiresAt] = useState<number | null>(null);
+  const [isPaying, setIsPaying] = useState(false);
+
+  useEffect(() => {
+    if (!property || !account) {
+      setHasAccess(false);
+      setAccessExpiresAt(null);
+      return;
+    }
+
+    const propId = property.id || property.walrusId;
+    if (!propId) {
+      setHasAccess(false);
+      setAccessExpiresAt(null);
+      return;
+    }
+
+    const key = `dwelloAccess_${account}_${propId}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) {
+        setHasAccess(false);
+        setAccessExpiresAt(null);
+        return;
+      }
+      const parsed = JSON.parse(raw) as { expiresAt?: number };
+      if (parsed.expiresAt && typeof parsed.expiresAt === 'number' && parsed.expiresAt > Date.now()) {
+        setHasAccess(true);
+        setAccessExpiresAt(parsed.expiresAt);
+      } else {
+        localStorage.removeItem(key);
+        setHasAccess(false);
+        setAccessExpiresAt(null);
+      }
+    } catch {
+      setHasAccess(false);
+      setAccessExpiresAt(null);
+    }
+  }, [property, account]);
+
+  useEffect(() => {
+    if (!accessExpiresAt) return;
+
+    const now = Date.now();
+    const remaining = accessExpiresAt - now;
+    if (remaining <= 0) {
+      setHasAccess(false);
+      setAccessExpiresAt(null);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setHasAccess(false);
+      setAccessExpiresAt(null);
+    }, remaining);
+
+    return () => clearTimeout(timeout);
+  }, [accessExpiresAt]);
+
+  const grantAccessFor24Hours = () => {
+    if (!property || !account) return;
+    const propId = property.id || property.walrusId;
+    if (!propId) return;
+    const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+    const key = `dwelloAccess_${account}_${propId}`;
+    localStorage.setItem(key, JSON.stringify({ expiresAt }));
+    setHasAccess(true);
+    setAccessExpiresAt(expiresAt);
+  };
+
+  const handlePayForAccess = async () => {
+    if (!account) {
+      alert('Connect your Sui wallet to pay for access.');
+      return;
+    }
+    setShowPayment(true);
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!property) return;
+    if (!account) {
+      alert('Connect your Sui wallet to pay for access.');
+      return;
+    }
+
+    try {
+      setIsPaying(true);
+      const houseId = property.id || property.walrusId;
+      if (!houseId) {
+        alert('This property is not linked to an on-chain house ID.');
+        return;
+      }
+      await payforaccess(houseId);
+      grantAccessFor24Hours();
+      setShowPayment(false);
+      alert('Payment successful. Chat unlocked for 24 hours.');
+    } catch (error) {
+      console.error('Pay for access failed:', error);
+      alert('Failed to pay for access. Please try again.');
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const handleSendMessage = () => {
+    if (inputMessage.trim() === '') return;
+
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      sender: 'user',
+      text: inputMessage,
+      timestamp: new Date()
+    };
+
+    setMessages([...messages, newMessage]);
+    setInputMessage('');
+
+    setIsTyping(true);
+    setTimeout(() => {
+      const responses = [
+        "I'd be happy to schedule a viewing for you. When would be convenient?",
+        "This property is available now. Would you like to proceed with payment?",
+        "Great question! All utilities are included except internet. Parking is available.",
+        "Yes, pets are welcome with a small deposit. Shall I send you the details?",
+        "The area is very safe with 24/7 security. Would you like a virtual tour?"
+      ];
+      
+      const caretakerReply: Message = {
+        id: (Date.now() + 1).toString(),
+        sender: 'caretaker',
+        text: responses[Math.floor(Math.random() * responses.length)],
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, caretakerReply]);
+      setIsTyping(false);
+    }, 1500);
+  };
 
   // Load images from Walrus on component mount
   useEffect(() => {
@@ -85,45 +228,6 @@ const PropertyDetails = ({ property: propProperty, onBack }: PropertyDetailsProp
     } else {
       window.history.back();
     }
-  };
-
-  const handleSendMessage = () => {
-    if (inputMessage.trim() === '') return;
-
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      sender: 'user',
-      text: inputMessage,
-      timestamp: new Date()
-    };
-
-    setMessages([...messages, newMessage]);
-    setInputMessage('');
-
-    setIsTyping(true);
-    setTimeout(() => {
-      const responses = [
-        "I'd be happy to schedule a viewing for you. When would be convenient?",
-        "This property is available now. Would you like to proceed with payment?",
-        "Great question! All utilities are included except internet. Parking is available.",
-        "Yes, pets are welcome with a small deposit. Shall I send you the details?",
-        "The area is very safe with 24/7 security. Would you like a virtual tour?"
-      ];
-      
-      const caretakerReply: Message = {
-        id: (Date.now() + 1).toString(),
-        sender: 'caretaker',
-        text: responses[Math.floor(Math.random() * responses.length)],
-        timestamp: new Date()
-      };
-
-      setMessages(prev => [...prev, caretakerReply]);
-      setIsTyping(false);
-    }, 1500);
-  };
-
-  const handlePayForAccess = async () => {
-    setShowPayment(true);
   };
 
   if (!property) {
@@ -235,10 +339,16 @@ const PropertyDetails = ({ property: propProperty, onBack }: PropertyDetailsProp
                   </span>
                   <span className="price-period">per year</span>
                 </div>
-                <button className="btn-pay-access" onClick={handlePayForAccess}>
-                  <span>💳</span>
-                  <span>Pay for Access</span>
-                </button>
+                {hasAccess ? (
+                  <div className="access-active-badge">
+                    <span>✅ Access unlocked for 24 hours</span>
+                  </div>
+                ) : (
+                  <button className="btn-pay-access" onClick={handlePayForAccess}>
+                    <span>💳</span>
+                    <span>Pay for Access</span>
+                  </button>
+                )}
               </div>
 
               <div className="property-stats-grid">
@@ -334,6 +444,7 @@ const PropertyDetails = ({ property: propProperty, onBack }: PropertyDetailsProp
 
         {/* Right Side - Chat Section */}
         <div className="chat-section">
+          {hasAccess ? (
           <div className="chat-container">
             <div className="chat-header-section">
               <div className="caretaker-profile">
@@ -412,6 +523,16 @@ const PropertyDetails = ({ property: propProperty, onBack }: PropertyDetailsProp
               </button>
             </div>
           </div>
+          ) : (
+            <div className="chat-locked">
+              <h3>Chat Locked</h3>
+              <p>Pay for access to message the property manager for 24 hours.</p>
+              <button className="btn-pay-access" onClick={handlePayForAccess}>
+                <span>💳</span>
+                <span>Pay for Access</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -430,17 +551,21 @@ const PropertyDetails = ({ property: propProperty, onBack }: PropertyDetailsProp
               </div>
               <div className="payment-row">
                 <span>Access Fee</span>
-                <span>0.1 SUI</span>
+                <span>0.01 USDC</span>
               </div>
               <div className="payment-row total">
                 <span>Total</span>
-                <span>0.1 SUI</span>
+                <span>0.01 USDC</span>
               </div>
             </div>
 
-            <button className="btn-confirm-payment">
+            <button
+              className="btn-confirm-payment"
+              onClick={handleConfirmPayment}
+              disabled={isPaying}
+            >
               <span>💳</span>
-              <span>Confirm Payment</span>
+              <span>{isPaying ? 'Processing...' : 'Confirm Payment'}</span>
             </button>
           </div>
         </div>
@@ -450,3 +575,4 @@ const PropertyDetails = ({ property: propProperty, onBack }: PropertyDetailsProp
 };
 
 export default PropertyDetails;
+

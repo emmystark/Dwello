@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { uploadMultipleToWalrus, getWalrusBlobUrl } from '../walrus/client';
 import type { Property, Apartment } from '../types';
 import '../styles/AddNewListing.css';
+import { useDwelloPayments } from '../payment';
 
 interface AddNewListingProps {
   onAddProperty: (property: Property) => void;
@@ -13,6 +14,11 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
     address: '',
     pricing: '',
     numberOfApartments: 1,
+    country: '',
+    state: '',
+    city: '',
+    bedrooms: '',
+    bathrooms: '',
   });
 
   const [apartments, setApartments] = useState<Partial<Apartment>[]>([
@@ -24,6 +30,7 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedBlobIds, setUploadedBlobIds] = useState<string[]>([]);
+  const { createHouseAndGetId } = useDwelloPayments();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -113,28 +120,94 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
       return;
     }
 
-    const imageUrls = uploadedBlobIds.map((blobId) => getWalrusBlobUrl(blobId));
+    try {
+      const houseId = await createHouseAndGetId(
+        formData.houseName,
+        formData.address,
+        formData.country,
+        formData.state,
+        formData.city,
+        formData.pricing,
+        formData.bedrooms,
+        formData.bathrooms,
+      );
 
-    const newProperty: Property = {
-      id: `prop_${Date.now()}`,
-      houseName: formData.houseName,
-      address: formData.address,
-      pricing: formData.pricing,
-      apartments: apartments.map((apt, idx) => ({
-        id: `apt_${Date.now()}_${idx}`,
-        number: apt.number || idx + 1,
-        tenant: apt.tenant || null,
-        possessionDate: apt.possessionDate || '',
-        expiryDate: apt.expiryDate || '',
-        pricing: apt.pricing || formData.pricing,
-        status: apt.status || 'vacant',
-      })),
-      totalEarnings: 0,
-      images: imageUrls,
-      blobIds: uploadedBlobIds,
-    };
+      const imageUrls = uploadedBlobIds.map((blobId) => getWalrusBlobUrl(blobId));
 
-    onAddProperty(newProperty);
+      const bedrooms = parseInt(formData.bedrooms || '1', 10);
+      const bathrooms = parseInt(formData.bathrooms || '1', 10);
+
+      const newProperty: Property = {
+        id: houseId || `prop_${Date.now()}`,
+        houseName: formData.houseName,
+        address: formData.address,
+        pricing: formData.pricing,
+        apartments: apartments.map((apt, idx) => ({
+          id: `apt_${Date.now()}_${idx}`,
+          number: apt.number || idx + 1,
+          tenant: apt.tenant || null,
+          possessionDate: apt.possessionDate || '',
+          expiryDate: apt.expiryDate || '',
+          pricing: apt.pricing || formData.pricing,
+          status: apt.status || 'vacant',
+        })),
+        totalEarnings: 0,
+        images: imageUrls,
+        blobIds: uploadedBlobIds,
+        title: `${bedrooms} Bedroom Apartment`,
+        location: `${formData.city || formData.state}, ${formData.country}`,
+        bedrooms,
+        bathrooms,
+        area: '100 sqm',
+        type: 'Apartment',
+        price: formData.pricing,
+        currency: '',
+        imageUrl: imageUrls[0],
+      };
+
+      onAddProperty(newProperty);
+
+      try {
+        const raw = localStorage.getItem('dwelloListings');
+        const stored = raw ? JSON.parse(raw) : [];
+
+        let currency = '';
+        let price = formData.pricing;
+        const match = formData.pricing.match(/^([^0-9\s]+)\s*(.+)$/);
+        if (match) {
+          currency = match[1];
+          price = match[2];
+        }
+
+        const publicListing = {
+          id: houseId || newProperty.id,
+          country: formData.country,
+          state: formData.state,
+          city: formData.city,
+          title: `${bedrooms} Bedroom Apartment`,
+          location: `${formData.city || formData.state}, ${formData.country}`,
+          price,
+          currency,
+          bedrooms,
+          bathrooms,
+          area: '100 sqm',
+          type: 'Apartment',
+          walrusId: houseId || newProperty.id,
+          imageUrl: imageUrls[0],
+        };
+
+        stored.push(publicListing);
+        localStorage.setItem('dwelloListings', JSON.stringify(stored));
+      } catch (storageError) {
+        console.warn('Failed to store public listing:', storageError);
+      }
+
+      alert('Property successfully added to the blockchain.');
+    } catch (error) {
+      console.error('Failed to create house on-chain:', error);
+      alert('Failed to create house on-chain. Please try again.');
+      return;
+    }
 
     // Reset form
     setFormData({
@@ -142,6 +215,11 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
       address: '',
       pricing: '',
       numberOfApartments: 1,
+      country: '',
+      state: '',
+      city: '',
+      bedrooms: '',
+      bathrooms: '',
     });
     setApartments([{ number: 1, tenant: null, status: 'vacant', pricing: '' }]);
     setSelectedFiles([]);
@@ -236,6 +314,71 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
                     +
                   </button>
                 </div>
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Country *</label>
+                <input
+                  type="text"
+                  name="country"
+                  value={formData.country}
+                  onChange={handleInputChange}
+                  placeholder="e.g., Nigeria"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>State / Region *</label>
+                <input
+                  type="text"
+                  name="state"
+                  value={formData.state}
+                  onChange={handleInputChange}
+                  placeholder="e.g., Lagos"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>City / Area *</label>
+                <input
+                  type="text"
+                  name="city"
+                  value={formData.city}
+                  onChange={handleInputChange}
+                  placeholder="e.g., Ikeja"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Bedrooms *</label>
+                <input
+                  type="number"
+                  name="bedrooms"
+                  value={formData.bedrooms}
+                  onChange={handleInputChange}
+                  min={1}
+                  placeholder="e.g., 3"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Bathrooms *</label>
+                <input
+                  type="number"
+                  name="bathrooms"
+                  value={formData.bathrooms}
+                  onChange={handleInputChange}
+                  min={1}
+                  placeholder="e.g., 2"
+                  required
+                />
               </div>
             </div>
           </div>

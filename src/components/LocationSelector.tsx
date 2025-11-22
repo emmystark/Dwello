@@ -41,6 +41,7 @@ const citiesByState: { [key: string]: string[] } = {
   'British Columbia': ['Vancouver', 'Victoria', 'Surrey', 'Burnaby', 'Richmond'],
   'Lagos': ['Ikeja', 'Victoria Island', 'Lekki', 'Ikoyi', 'Surulere', 'Yaba'],
   'Abuja (FCT)': ['Central Area', 'Garki', 'Wuse', 'Maitama', 'Asokoro', 'Gwarinpa'],
+  'Edo': ['Benin City', 'Benin'],
   'Dubai': ['Downtown Dubai', 'Dubai Marina', 'Jumeirah', 'Business Bay', 'JBR'],
   'Abu Dhabi': ['Abu Dhabi City', 'Al Ain', 'Khalifa City', 'Yas Island'],
   'New South Wales': ['Sydney', 'Newcastle', 'Wollongong', 'Central Coast'],

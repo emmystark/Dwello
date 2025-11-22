@@ -1,11 +1,19 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext } from 'react'
 import type { ReactNode } from 'react'
+import {
+  useConnectWallet,
+  useCurrentAccount,
+  useCurrentWallet,
+  useDisconnectWallet,
+  useWallets,
+} from '@mysten/dapp-kit'
 
 interface SuiContextType {
   account: string | null
   isConnected: boolean
   connect: () => Promise<void>
   disconnect: () => void
+  wallet: any | null
 }
 
 const SuiContext = createContext<SuiContextType | undefined>(undefined)
@@ -23,42 +31,40 @@ interface SuiProviderProps {
 }
 
 export const SuiProvider = ({ children }: SuiProviderProps) => {
-  const [account, setAccount] = useState<string | null>(null)
-  const [isConnected, setIsConnected] = useState(false)
+  const currentAccount = useCurrentAccount()
+  const { currentWallet, connectionStatus } = useCurrentWallet()
+  const wallets = useWallets()
+  const { mutateAsync: connectWallet } = useConnectWallet()
+  const { mutateAsync: disconnectWallet } = useDisconnectWallet()
+
+  const account = currentAccount?.address ?? null
+  const isConnected = connectionStatus === 'connected'
 
   const connect = async () => {
     try {
-      // Check if Sui wallet is installed
-      if (typeof window !== 'undefined' && (window as any).suiWallet) {
-        const wallet = (window as any).suiWallet
-        const accounts = await wallet.requestPermissions()
-        
-        if (accounts && accounts.length > 0) {
-          setAccount(accounts[0])
-          setIsConnected(true)
-          console.log('Connected to Sui wallet:', accounts[0])
-        }
-      } else {
-        // For development/testing without wallet
-        console.log('Sui Wallet not detected. Using mock connection.')
-        const mockAddress = '0x' + Math.random().toString(16).substring(2, 42)
-        setAccount(mockAddress)
-        setIsConnected(true)
-        alert('Demo Mode: Sui wallet not detected. Using mock connection for testing.')
+      if (!wallets.length) {
+        alert('No Sui wallet detected. Please install Slush or another Sui wallet.')
+        return
       }
+
+      // Connect to the first available wallet (e.g., Slush)
+      await connectWallet({ wallet: wallets[0] })
     } catch (error) {
       console.error('Failed to connect wallet:', error)
       alert('Failed to connect wallet. Please try again.')
     }
   }
 
-  const disconnect = () => {
-    setAccount(null)
-    setIsConnected(false)
+  const disconnect = async () => {
+    try {
+      await disconnectWallet()
+    } catch (error) {
+      console.error('Failed to disconnect wallet:', error)
+    }
   }
 
   return (
-    <SuiContext.Provider value={{ account, isConnected, connect, disconnect }}>
+    <SuiContext.Provider value={{ account, isConnected, connect, disconnect, wallet: currentWallet }}>
       {children}
     </SuiContext.Provider>
   )

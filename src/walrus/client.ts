@@ -1,7 +1,14 @@
 // Walrus storage client utilities
+import { SuiClient, getFullnodeUrl } from '@mysten/sui/client';
 
+// Aggregator is recommended for reads, publisher for writes (see https://docs.wal.app/usage/web-api.html)
 const WALRUS_AGGREGATOR_URL = 'https://aggregator.walrus-testnet.walrus.space';
 const WALRUS_PUBLISHER_URL = 'https://publisher.walrus-testnet.walrus.space';
+
+// Shared Sui client (testnet) for reading transaction blocks, events, etc.
+export const suiClient = new SuiClient({
+  url: getFullnodeUrl('testnet'),
+});
 
 export interface UploadResult {
   blobId: string;
@@ -23,12 +30,9 @@ export const getWalrusBlobUrl = (blobId: string): string => {
  */
 export const uploadToWalrus = async (file: File): Promise<UploadResult> => {
   try {
-    // Create form data
-    const formData = new FormData();
-    formData.append('file', file);
-
-    // Upload to Walrus
-    const response = await fetch(`${WALRUS_PUBLISHER_URL}/v1/store`, {
+    // Upload to Walrus HTTP API on the publisher. See https://docs.wal.app/usage/web-api.html
+    const url = `${WALRUS_PUBLISHER_URL}/v1/blobs?epochs=3&deletable=true`;
+    const response = await fetch(url, {
       method: 'PUT',
       body: file,
       headers: {
@@ -37,14 +41,27 @@ export const uploadToWalrus = async (file: File): Promise<UploadResult> => {
     });
 
     if (!response.ok) {
-      throw new Error(`Upload failed: ${response.statusText}`);
+      let extra = '';
+      try {
+        const text = await response.text();
+        extra = text ? ` Body: ${text}` : '';
+      } catch {
+        // ignore
+      }
+      throw new Error(`Upload failed: HTTP ${response.status} ${response.statusText}.${extra}`);
     }
 
     const result = await response.json();
-    
-    // Extract blob ID from response
-    const blobId = result.newlyCreated?.blobObject?.blobId || 
-                   result.alreadyCertified?.blobId;
+
+    // Extract blob ID from response (HTTP API typically returns blob_id)
+    const blobId =
+      result.blob_id ??
+      result.blobId ??
+      result.id ??
+      result.cid ??
+      result.hash ??
+      result.newlyCreated?.blobObject?.blobId ??
+      result.alreadyCertified?.blobId;
 
     if (!blobId) {
       throw new Error('No blob ID returned from Walrus');
@@ -79,6 +96,8 @@ export const uploadMultipleToWalrus = async (
       }
     } catch (error) {
       console.error(`Failed to upload file ${files[i].name}:`, error);
+      // Propagate the error so callers can show a proper failure message
+      throw error;
     }
   }
   

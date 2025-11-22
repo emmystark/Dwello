@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import LocationSelector from './components/LocationSelector'
 import PropertyList from './components/PropertyList'
@@ -6,6 +6,7 @@ import PropertyDetails from './components/PropertyDetails'
 import CaretakerDashboard from './components/CaretakerDashboard'
 import { useSui } from './sui/SuiProviders'
 import './styles/App.css'
+import caretakerWhitelistRaw from './walrus/caretakers.txt?raw'
 
 interface Location {
   country?: string
@@ -16,10 +17,49 @@ interface Location {
 function AppContent() {
   const [selectedLocation, setSelectedLocation] = useState<Location>({})
   const [viewMode, setViewMode] = useState<'customer' | 'caretaker'>('customer')
-  const { isConnected, connect } = useSui()
+  const { isConnected, connect, disconnect, account } = useSui()
+  const [showWalletMenu, setShowWalletMenu] = useState(false)
+  const [isCaretakerAllowed, setIsCaretakerAllowed] = useState(false)
+
+  useEffect(() => {
+    if (!account) {
+      setIsCaretakerAllowed(false)
+      return
+    }
+
+    const allowed = caretakerWhitelistRaw
+      .split(/\r?\n/)
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+      .includes(account.toLowerCase())
+
+    setIsCaretakerAllowed(allowed)
+  }, [account])
 
   const handleLocationSelect = (location: Location) => {
     setSelectedLocation(location)
+  }
+
+  const handleToggleView = () => {
+    if (viewMode === 'customer') {
+      if (!isConnected) {
+        alert('Please connect your Sui wallet first.')
+        return
+      }
+      if (!isCaretakerAllowed) {
+        alert('This wallet address is not registered as a caretaker.')
+        return
+      }
+      setViewMode('caretaker')
+    } else {
+      setViewMode('customer')
+    }
+  }
+
+  const handleDisconnect = () => {
+    disconnect()
+    setViewMode('customer')
+    setShowWalletMenu(false)
   }
 
   if (viewMode === 'caretaker') {
@@ -37,16 +77,31 @@ function AppContent() {
         <div className="header-actions-group">
           <button 
             className="mode-switch"
-            onClick={() => setViewMode(viewMode === 'customer' ? 'caretaker' : 'customer')}
+            onClick={handleToggleView}
           >
             {viewMode === 'customer' ? 'Caretaker Portal' : '👤 Customer View'}
           </button>
-          <button 
-            className={`connect-btn ${isConnected ? 'connected' : ''}`}
-            onClick={connect}
-          >
-            {isConnected ? '✓ Connected' : 'Connect Wallet'}
-          </button>
+          <div className="wallet-button-wrapper">
+            <button 
+              className={`connect-btn ${isConnected ? 'connected' : ''}`}
+              onClick={() => {
+                if (!isConnected) {
+                  connect()
+                } else {
+                  setShowWalletMenu((prev) => !prev)
+                }
+              }}
+            >
+              {isConnected ? '✓ Connected' : 'Connect Wallet'}
+            </button>
+            {isConnected && showWalletMenu && (
+              <div className="wallet-dropdown">
+                <button className="wallet-dropdown-item" onClick={handleDisconnect}>
+                  Disconnect Wallet
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
