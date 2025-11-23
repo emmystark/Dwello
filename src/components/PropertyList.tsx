@@ -253,7 +253,7 @@ const PropertyList = ({ location }: PropertyListProps) => {
                     style={{ opacity: 0, height:200, width: '138%', transition: "opacity 0.5s" }}
                   />
                 ) : (
-                  <div className="image-icon"></div>
+                  <div className="image-icon">😩</div>
                 )}
               </div>
 
