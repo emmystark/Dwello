@@ -282,7 +282,7 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
                   name="pricing"
                   value={formData.pricing}
                   onChange={handleInputChange}
-                  placeholder="e.g., 25,000"
+                  placeholder="e.g., $25,000"
                   required
                 />
               </div>
