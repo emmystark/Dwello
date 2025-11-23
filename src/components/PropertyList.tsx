@@ -250,7 +250,7 @@ const PropertyList = ({ location }: PropertyListProps) => {
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = "none";
                     }}
-                    style={{ opacity: 0, height:200, width: '120%', transition: "opacity 0.5s" }}
+                    style={{ opacity: 0, height:200, width: '140%', transition: "opacity 0.5s" }}
                   />
                 ) : (
                   <div className="image-icon">😩</div>
