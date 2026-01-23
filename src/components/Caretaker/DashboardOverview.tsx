@@ -1,4 +1,4 @@
-import type { Property } from '../types'
+import type { Property } from '../../types'
 
 interface DashboardOverviewProps {
   properties: Property[]
@@ -19,7 +19,7 @@ const DashboardOverview = ({ properties, totalEarnings }: DashboardOverviewProps
     <div className="dashboard-overview">
       <div className="stats-grid">
         <div className="stat-card earnings">
-          <div className="stat-icon">💰</div>
+          <div className="stat-icon"></div>
           <div className="stat-content">
             <p className="stat-label">Monthly Earnings</p>
             <h2 className="stat-value">${totalEarnings.toLocaleString()}</h2>
@@ -28,7 +28,7 @@ const DashboardOverview = ({ properties, totalEarnings }: DashboardOverviewProps
         </div>
 
         <div className="stat-card properties">
-          <div className="stat-icon">🏢</div>
+          <div className="stat-icon"></div>
           <div className="stat-content">
             <p className="stat-label">Total Properties</p>
             <h2 className="stat-value">{totalProperties}</h2>
@@ -37,7 +37,7 @@ const DashboardOverview = ({ properties, totalEarnings }: DashboardOverviewProps
         </div>
 
         <div className="stat-card occupied">
-          <div className="stat-icon">✅</div>
+          <div className="stat-icon"></div>
           <div className="stat-content">
             <p className="stat-label">Occupied Units</p>
             <h2 className="stat-value">{occupiedApartments}</h2>
@@ -46,7 +46,7 @@ const DashboardOverview = ({ properties, totalEarnings }: DashboardOverviewProps
         </div>
 
         <div className="stat-card vacant">
-          <div className="stat-icon">🏚️</div>
+          <div className="stat-icon"></div>
           <div className="stat-content">
             <p className="stat-label">Vacant Units</p>
             <h2 className="stat-value">{vacantApartments}</h2>
@@ -69,7 +69,7 @@ const DashboardOverview = ({ properties, totalEarnings }: DashboardOverviewProps
             </div>
             
             <div className="activity-item">
-              <div className="activity-icon payment">💵</div>
+              <div className="activity-icon payment"></div>
               <div className="activity-details">
                 <p className="activity-title">Payment received</p>
                 <p className="activity-desc">$25,000 from Beverly Homes</p>
@@ -78,7 +78,7 @@ const DashboardOverview = ({ properties, totalEarnings }: DashboardOverviewProps
             </div>
             
             <div className="activity-item">
-              <div className="activity-icon expiry">⚠️</div>
+              <div className="activity-icon expiry"></div>
               <div className="activity-details">
                 <p className="activity-title">Lease expiring soon</p>
                 <p className="activity-desc">Apartment 2 - 30 days remaining</p>
@@ -91,7 +91,7 @@ const DashboardOverview = ({ properties, totalEarnings }: DashboardOverviewProps
         <div className="quick-actions">
           <h3>Quick Actions</h3>
           <div className="action-buttons">
-            <button className="action-btn">
+            <button className="action-btn" >
               <span className="action-icon">➕</span>
               <span>Add New Property</span>
             </button>

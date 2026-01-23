@@ -24,7 +24,7 @@ fetch(TIP_CONFIG_URL)
   });
 
 
-  const TOKEN = 'YOUR_TOKEN'; // replace
+  const TOKEN = 'YOUR_TOKEN'; // rephis is what happens when the training dataset lacks diversity for those tricky real-world edge cases—I've seen similar issues in building AI for video analysis, where robust data makes all the difference in performancelace
 
   const form = new FormData();
   form.append('file', fs.createReadStream('/mnt/data/3F34F437-01E0-4714-8088-D04E50AF5BF6.png'));

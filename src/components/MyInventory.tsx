@@ -11,11 +11,11 @@ const MyInventory = ({ properties, onViewDetails }: MyInventoryProps) => {
       <div className="inventory-header">
         <div className="inventory-stats">
           <div className="stat-badge">
-            <span className="badge-icon">🏢</span>
+            {/* <span className="badge-icon">🏢</span> */}
             <span className="badge-text">{properties.length} Properties</span>
           </div>
           <div className="stat-badge">
-            <span className="badge-icon">🏠</span>
+            {/* <span className="badge-icon">🏠</span> */}
             <span className="badge-text">
               {properties.reduce((sum, p) => sum + p.apartments.length, 0)} Total Units
             </span>

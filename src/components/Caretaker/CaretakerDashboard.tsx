@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import DashboardOverview from './DashboardOverview'
-import MyInventory from './MyInventory'
-import AddNewListing from './AddNewListing'
-import PropertyDetails from './PropertyDetails'
-import type { Property } from '../types'
-import '../styles/Dashboard.css'
+import MyInventory from '../MyInventory'
+import AddNewListing from '../AddNewListing'
+import PropertyDetails from '../PropertyDetails'
+import type { Property } from '../../types'
+import '../../styles/Dashboard.css'
 
 const CaretakerDashboard = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'addNew'>('overview')
@@ -99,7 +99,7 @@ const CaretakerDashboard = () => {
       <div className="dashboard-sidebar">
         <div className="sidebar-header">
           <div className="logo">
-            <span className="logo-icon">🏢</span>
+            <span className="logo-icon"></span>
             <h2>Caretaker</h2>
           </div>
         </div>
@@ -109,7 +109,7 @@ const CaretakerDashboard = () => {
             className={`nav-item ${activeTab === 'overview' ? 'active' : ''}`}
             onClick={() => setActiveTab('overview')}
           >
-            <span className="nav-icon">📊</span>
+            <span className="nav-icon"></span>
             <span>Dashboard</span>
           </button>
           
@@ -117,7 +117,7 @@ const CaretakerDashboard = () => {
             className={`nav-item ${activeTab === 'inventory' ? 'active' : ''}`}
             onClick={() => setActiveTab('inventory')}
           >
-            <span className="nav-icon">🏠</span>
+            <span className="nav-icon"></span>
             <span>My Inventory</span>
           </button>
           
@@ -125,7 +125,7 @@ const CaretakerDashboard = () => {
             className={`nav-item ${activeTab === 'addNew' ? 'active' : ''}`}
             onClick={() => setActiveTab('addNew')}
           >
-            <span className="nav-icon">➕</span>
+            <span className="nav-icon"></span>
             <span>Add New Listing</span>
           </button>
         </nav>
@@ -134,7 +134,7 @@ const CaretakerDashboard = () => {
           <div className="earnings-widget">
             <p className="widget-label">Monthly Earnings</p>
             <h3 className="widget-value">${totalMonthlyEarnings.toLocaleString()}</h3>
-            <p className="widget-subtext">💰 Total Revenue</p>
+            <p className="widget-subtext"> Total Revenue</p>
           </div>
         </div>
       </div>
@@ -147,10 +147,10 @@ const CaretakerDashboard = () => {
             {activeTab === 'addNew' && 'Add New Listing'}
           </h1>
           <div className="header-actions">
-            <button className="notification-btn">
+            {/* <button className="notification-btn">
               <span>🔔</span>
               <span className="notification-badge">3</span>
-            </button>
+            </button> */}
             <div className="user-profile">
               <div className="avatar">👤</div>
             </div>
