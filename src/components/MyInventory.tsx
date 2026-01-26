@@ -1,4 +1,5 @@
 import type { Property } from '../types'
+import WalletBalance from './WalletBalance'
 
 interface MyInventoryProps {
   properties: Property[]
@@ -61,7 +62,8 @@ const MyInventory = ({ properties, onViewDetails }: MyInventoryProps) => {
 
                 <div className="property-earnings">
                   <span className="earnings-label">Monthly Earnings</span>
-                  <span className="earnings-value">${property.totalEarnings.toLocaleString()}</span>
+                  {/* <span className="earnings-value">${property.totalEarnings.toLocaleString()}</span> */}
+                 
                 </div>
 
                 <div className="property-actions">

@@ -225,6 +225,39 @@
   text-overflow: ellipsis;
 }
 
+/* Amount Input Group */
+.amount-input-group {
+  padding: 10px;
+  background: white;
+  border-top: 1px solid #e0e0e0;
+}
+
+.amount-input-group label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.amount-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  text-align: right;
+}
+
+.amount-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
+
 .btn-remove {
   position: absolute;
   top: 5px;

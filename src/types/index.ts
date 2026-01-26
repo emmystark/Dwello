@@ -11,13 +11,22 @@ export interface Apartment {
     status: 'occupied' | 'vacant';
   }
   
-  export interface Property {
+  export interface ImageWithAmount {
+  blobId: string;
+  url: string;
+  amount?: number; // Amount associated with this image (in base units)
+  fileName?: string;
+  uploadedAt?: string;
+}
+
+export interface Property {
     id: string;
     houseName: string;
     address: string;
     apartments: Apartment[];
     totalEarnings: number;
-    images?: string[];
+    images?: ImageWithAmount[]; // Updated to include amounts
+    imagesWithAmounts?: ImageWithAmount[]; // Alternative field
     blobIds?: string[];
     pricing: string;
     // Additional fields for customer view
@@ -31,6 +40,8 @@ export interface Apartment {
     price?: string;
     currency?: string;
     imageUrl?: string;
+    caretakerAddress?: string; // For messaging
+    totalAmount?: number; // Total of all image amounts
   }
   
   export interface Message {

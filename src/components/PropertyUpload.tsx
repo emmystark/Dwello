@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef } from 'react';
-import { uploadToWalrus, uploadMultipleToWalrus } from '../walrus/client';
-import type { Property } from '../types';
+import { uploadMultipleToWalrus } from '../walrus/client';
+import { apiRequest, API_CONFIG } from '../lib/api-config';
+import { useSui } from '../sui/SuiProviders';
+import type { Property, ImageWithAmount } from '../types';
 import '../styles/PropertyUpload.css';
 
 interface PropertyUploadProps {
@@ -22,7 +24,13 @@ interface FormData {
   description: string;
 }
 
+interface FileWithAmount {
+  file: File;
+  amount: number; // Amount for this specific file/image
+}
+
 const PropertyUpload = ({ onSuccess, onError }: PropertyUploadProps) => {
+  const { account } = useSui();
   const [formData, setFormData] = useState<FormData>({
     houseName: '',
     address: '',
@@ -37,7 +45,7 @@ const PropertyUpload = ({ onSuccess, onError }: PropertyUploadProps) => {
     description: '',
   });
 
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<FileWithAmount[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -72,7 +80,13 @@ const PropertyUpload = ({ onSuccess, onError }: PropertyUploadProps) => {
       );
     }
 
-    setSelectedFiles((prev) => [...prev, ...validFiles]);
+    // Add files with default amount of 0 (user can edit)
+    const filesWithAmount = validFiles.map((file) => ({
+      file,
+      amount: 0,
+    }));
+
+    setSelectedFiles((prev) => [...prev, ...filesWithAmount]);
 
     // Create preview URLs
     const newPreviewUrls = validFiles.map((file) => URL.createObjectURL(file));
@@ -87,6 +101,18 @@ const PropertyUpload = ({ onSuccess, onError }: PropertyUploadProps) => {
         URL.revokeObjectURL(url);
         return prev.filter((_, i) => i !== index);
       });
+    },
+    []
+  );
+
+  // New function to update amount for a specific file
+  const handleAmountChange = useCallback(
+    (index: number, amount: number) => {
+      setSelectedFiles((prev) =>
+        prev.map((item, i) =>
+          i === index ? { ...item, amount: Math.max(0, amount) } : item
+        )
+      );
     },
     []
   );
@@ -110,7 +136,8 @@ const PropertyUpload = ({ onSuccess, onError }: PropertyUploadProps) => {
     );
 
     if (validFiles.length > 0) {
-      setSelectedFiles((prev) => [...prev, ...validFiles]);
+      const filesWithAmounts = validFiles.map(file => ({ file, amount: 0 }));
+      setSelectedFiles((prev) => [...prev, ...filesWithAmounts]);
       const newPreviewUrls = validFiles.map((file) => URL.createObjectURL(file));
       setPreviewUrls((prev) => [...prev, ...newPreviewUrls]);
       setError(null);
@@ -150,13 +177,27 @@ const PropertyUpload = ({ onSuccess, onError }: PropertyUploadProps) => {
     setUploadProgress(0);
 
     try {
+      // Extract files from FileWithAmount objects
+      const files = selectedFiles.map((item) => item.file);
+      const amounts = selectedFiles.map((item) => item.amount);
+
       // Upload images to Walrus
       const walrusResults = await uploadMultipleToWalrus(
-        selectedFiles,
+        files,
         (progress) => setUploadProgress(progress * 0.7) // 70% for uploads
       );
 
       setUploadProgress(75);
+
+      // Combine Walrus results with amounts
+      const imagesWithAmounts: ImageWithAmount[] = walrusResults.map(
+        (result, index) => ({
+          ...result,
+          amount: amounts[index] || 0,
+          fileName: files[index].name,
+          uploadedAt: new Date().toISOString(),
+        })
+      );
 
       // Prepare property data
       const propertyData = new FormData();
@@ -171,27 +212,29 @@ const PropertyUpload = ({ onSuccess, onError }: PropertyUploadProps) => {
       propertyData.append('state', formData.state);
       propertyData.append('city', formData.city);
       propertyData.append('description', formData.description);
+      if (account) {
+        propertyData.append('caretakerAddress', account);
+      }
 
-      // Add images
-      for (const file of selectedFiles) {
+      // Add images with amounts as JSON
+      propertyData.append('imagesWithAmounts', JSON.stringify(imagesWithAmounts));
+
+      // Add images for backward compatibility
+      for (const file of files) {
         propertyData.append('images', file);
       }
-
       setUploadProgress(80);
 
-      // Submit to backend API
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiUrl}/api/properties`, {
+      // Submit to backend API using centralized API function
+      const result = await apiRequest<any>(API_CONFIG.endpoints.properties.create, {
         method: 'POST',
         body: propertyData,
+        timeout: 60000, // Longer timeout for file uploads
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create property');
+      if (!result?.property && !result?.success) {
+        throw new Error(result?.error || 'Failed to create property');
       }
-
-      const result = await response.json();
       setUploadProgress(100);
 
       // Reset form
@@ -212,7 +255,7 @@ const PropertyUpload = ({ onSuccess, onError }: PropertyUploadProps) => {
       previewUrls.forEach((url) => URL.revokeObjectURL(url));
       setPreviewUrls([]);
 
-      setSuccess('Property uploaded successfully! 🎉');
+      setSuccess('Property uploaded successfully!');
 
       if (onSuccess) {
         onSuccess(result.property);
@@ -238,8 +281,8 @@ const PropertyUpload = ({ onSuccess, onError }: PropertyUploadProps) => {
   return (
     <div className="property-upload-container">
       <div className="upload-header">
-        <h2>📍 Create New Property Listing</h2>
-        <p>Upload images and details securely to Walrus & Sui blockchain</p>
+        <h2>Create New Property Listing</h2>
+        <p>Upload images and details securely to Walrus and Sui blockchain</p>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -439,13 +482,29 @@ const PropertyUpload = ({ onSuccess, onError }: PropertyUploadProps) => {
               {previewUrls.map((url, index) => (
                 <div key={index} className="preview-item">
                   <div className="preview-image">
-                    {selectedFiles[index].type.startsWith('video/') ? (
+                    {selectedFiles[index].file.type.startsWith('video/') ? (
                       <video src={url} />
                     ) : (
                       <img src={url} alt={`Preview ${index + 1}`} />
                     )}
-                    <div className="file-name">{selectedFiles[index].name}</div>
+                    <div className="file-name">{selectedFiles[index].file.name}</div>
                   </div>
+                  
+                  {/* Amount input for this image */}
+                  <div className="amount-input-group">
+                    <label htmlFor={`amount-${index}`}>Amount (USDC)</label>
+                    <input
+                      type="number"
+                      id={`amount-${index}`}
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={selectedFiles[index].amount}
+                      onChange={(e) => handleAmountChange(index, parseFloat(e.target.value) || 0)}
+                      className="amount-input"
+                    />
+                  </div>
+                  
                   <button
                     type="button"
                     className="btn-remove"

@@ -7,6 +7,13 @@ import path from 'path';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
 import FormData from 'form-data';
+import {
+  verifyPayment,
+  validateWalrusBlob,
+  verifyPaymentAndBlob,
+  isCaretaker,
+  getCaretakerProperties,
+} from './payment-service.js';
 
 dotenv.config();
 
@@ -68,6 +75,42 @@ const WALRUS_AGGREGATOR_URL =
 // In-memory database (replace with proper DB)
 const properties = new Map();
 const blobRegistry = new Map(); // Track which blobs belong to which property
+
+/**
+ * Middleware to verify payment before accessing paid content
+ */
+async function requirePayment(req, res, next) {
+  const { userAddress, propertyId } = req.query;
+
+  if (!userAddress || !propertyId) {
+    return res.status(400).json({
+      error: 'Missing userAddress or propertyId',
+    });
+  }
+
+  try {
+    const paymentStatus = await verifyPayment(userAddress, propertyId);
+
+    if (!paymentStatus.hasPaid) {
+      return res.status(403).json({
+        error: 'Payment required',
+        message: 'User must pay fee to access this property',
+        paymentRequired: true,
+      });
+    }
+
+    // Store payment info in request for downstream handlers
+    req.paymentVerified = true;
+    req.accessPass = paymentStatus.accessPass;
+    next();
+  } catch (error) {
+    console.error('Payment verification error:', error);
+    res.status(500).json({
+      error: 'Payment verification failed',
+      details: error.message,
+    });
+  }
+}
 
 /**
  * Upload file to Walrus
@@ -448,6 +491,190 @@ app.get('/api/caretaker/:address/properties', (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Payment & Access Control Routes
+ */
+
+// Check if user has paid for a property
+app.get('/api/payment-status', async (req, res) => {
+  const { userAddress, propertyId } = req.query;
+
+  if (!userAddress || !propertyId) {
+    return res.status(400).json({
+      error: 'Missing userAddress or propertyId',
+    });
+  }
+
+  try {
+    const status = await verifyPayment(userAddress, propertyId);
+    res.json(status);
+  } catch (error) {
+    console.error('Payment status check error:', error);
+    res.status(500).json({
+      error: 'Failed to check payment status',
+      details: error.message,
+    });
+  }
+});
+
+// Verify payment AND blob validity together
+app.get('/api/verify-access', async (req, res) => {
+  const { userAddress, propertyId, blobId } = req.query;
+
+  if (!userAddress || !propertyId) {
+    return res.status(400).json({
+      error: 'Missing userAddress or propertyId',
+    });
+  }
+
+  try {
+    const verification = await verifyPaymentAndBlob(userAddress, propertyId, blobId);
+    res.json(verification);
+  } catch (error) {
+    console.error('Access verification error:', error);
+    res.status(500).json({
+      error: 'Failed to verify access',
+      details: error.message,
+    });
+  }
+});
+
+// Validate Walrus blob exists
+app.get('/api/blob-validation/:blobId', async (req, res) => {
+  const { blobId } = req.params;
+
+  if (!blobId) {
+    return res.status(400).json({ error: 'Blob ID required' });
+  }
+
+  try {
+    const validation = await validateWalrusBlob(blobId);
+    res.json(validation);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Blob validation failed',
+      details: error.message,
+    });
+  }
+});
+
+// Get property details (payment-protected)
+app.get('/api/properties/:id/details', requirePayment, async (req, res) => {
+  try {
+    const property = properties.get(req.params.id);
+
+    if (!property) {
+      return res.status(404).json({ error: 'Property not found' });
+    }
+
+    res.json({
+      success: true,
+      property,
+      accessVerified: true,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get property images (payment-protected)
+app.get('/api/properties/:id/images', requirePayment, async (req, res) => {
+  try {
+    const property = properties.get(req.params.id);
+
+    if (!property) {
+      return res.status(404).json({ error: 'Property not found' });
+    }
+
+    res.json({
+      success: true,
+      images: property.images,
+      primaryImage: property.primaryImage,
+      accessVerified: true,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Protected Walrus blob retrieval route
+app.get('/api/walrus/blob/:blobId', requirePayment, async (req, res) => {
+  const { blobId } = req.params;
+
+  if (!blobId) {
+    return res.status(400).json({ error: 'Blob ID required' });
+  }
+
+  try {
+    const validation = await validateWalrusBlob(blobId);
+
+    if (!validation.valid) {
+      return res.status(404).json({
+        error: 'Blob not found or inaccessible',
+        blobId,
+      });
+    }
+
+    res.json({
+      success: true,
+      blobId,
+      url: validation.url,
+      accessible: true,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to access blob',
+      details: error.message,
+    });
+  }
+});
+
+// Check if user is a caretaker
+app.get('/api/is-caretaker/:address', async (req, res) => {
+  const { address } = req.params;
+
+  if (!address) {
+    return res.status(400).json({ error: 'Address required' });
+  }
+
+  try {
+    const isCaret = await isCaretaker(address);
+    res.json({
+      address,
+      isCaretaker: isCaret,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to check caretaker status',
+      details: error.message,
+    });
+  }
+});
+
+// Get caretaker's properties from on-chain
+app.get('/api/caretaker/:address/properties-onchain', async (req, res) => {
+  const { address } = req.params;
+
+  if (!address) {
+    return res.status(400).json({ error: 'Address required' });
+  }
+
+  try {
+    const properties = await getCaretakerProperties(address);
+    res.json({
+      success: true,
+      caretaker: address,
+      properties,
+      count: properties.length,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get caretaker properties',
+      details: error.message,
+    });
   }
 });
 

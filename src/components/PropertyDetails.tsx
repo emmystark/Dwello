@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { getWalrusBlobUrl } from "../walrus/client";
 import bedroomBlobIds from "../walrus/bloblds";
-import type { Property, Message } from "../types";
+import type { Property } from "../types";
 import "../styles/PropertyDetails.css";
 import { useDwelloPayments } from "../payment";
 import { useSui } from "../sui/SuiProviders";
+import CaretakerChatSection from "./CaretakerChatSection";
 
 interface PropertyDetailsProps {
   property?: Property;
@@ -22,21 +23,9 @@ const PropertyDetails = ({
   const { payforaccess } = useDwelloPayments();
 
   const [propertyImages, setPropertyImages] = useState<string[]>([]);
+  const [imageAmounts, setImageAmounts] = useState<(number | undefined)[]>([]);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [loadingImages, setLoadingImages] = useState(true);
-
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      sender: "caretaker",
-      text: `Hi! I'm the property manager. How can I help you with ${
-        property?.houseName || property?.title || "this property"
-      }?`,
-      timestamp: new Date(),
-    },
-  ]);
-  const [inputMessage, setInputMessage] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
   const [accessExpiresAt, setAccessExpiresAt] = useState<number | null>(null);
@@ -147,41 +136,6 @@ const PropertyDetails = ({
     }
   };
 
-  const handleSendMessage = () => {
-    if (inputMessage.trim() === "") return;
-
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      sender: "user",
-      text: inputMessage,
-      timestamp: new Date(),
-    };
-
-    setMessages([...messages, newMessage]);
-    setInputMessage("");
-
-    setIsTyping(true);
-    setTimeout(() => {
-      const responses = [
-        "I'd be happy to schedule a viewing for you. When would be convenient?",
-        "This property is available now. Would you like to proceed with payment?",
-        "Great question! All utilities are included except internet. Parking is available.",
-        "Yes, pets are welcome with a small deposit. Shall I send you the details?",
-        "The area is very safe with 24/7 security. Would you like a virtual tour?",
-      ];
-
-      const caretakerReply: Message = {
-        id: (Date.now() + 1).toString(),
-        sender: "caretaker",
-        text: responses[Math.floor(Math.random() * responses.length)],
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, caretakerReply]);
-      setIsTyping(false);
-    }, 1500);
-  };
-
   // Load images from Walrus on component mount
   useEffect(() => {
     const loadImages = async () => {
@@ -189,6 +143,7 @@ const PropertyDetails = ({
 
       setLoadingImages(true);
       const images: string[] = [];
+      const amounts: (number | undefined)[] = [];
 
       try {
         // First, try to load from property's blob IDs
@@ -197,18 +152,29 @@ const PropertyDetails = ({
             try {
               const url = getWalrusBlobUrl(blobId);
               images.push(url);
+              amounts.push(undefined);
             } catch (error) {
               console.error("Failed to load blob:", blobId, error);
             }
           }
         }
-        // Then try existing image URLs
+        // Then try existing image URLs with amounts
         else if (property.images && property.images.length > 0) {
-          images.push(...property.images);
+          for (const img of property.images) {
+            // Handle both ImageWithAmount interface and plain URLs
+            if (typeof img === 'string') {
+              images.push(img);
+              amounts.push(undefined);
+            } else if (typeof img === 'object' && 'url' in img) {
+              images.push(img.url);
+              amounts.push(img.amount);
+            }
+          }
         }
         // Try imageUrl property
         else if (property.imageUrl) {
           images.push(property.imageUrl);
+          amounts.push(undefined);
         }
         // Finally, try to load from bedroom blob IDs based on bedrooms count
         else if (property.bedrooms && bedroomBlobIds[property.bedrooms]) {
@@ -220,12 +186,14 @@ const PropertyDetails = ({
               : firstEntry;
             const url = getWalrusBlobUrl(blobId);
             images.push(url);
+            amounts.push(undefined);
           }
         }
       } catch (error) {
         console.error("Error loading images:", error);
       } finally {
         setPropertyImages(images);
+        setImageAmounts(amounts);
         setLoadingImages(false);
       }
     };
@@ -295,25 +263,32 @@ const PropertyDetails = ({
                     <p>Loading images...</p>
                   </div>
                 ) : propertyImages.length > 0 ? (
-                  <img
-                    src={propertyImages[selectedImageIndex]}
-                    alt={property.houseName || property.title}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = "none";
-                      const parent = (e.target as HTMLImageElement)
-                        .parentElement;
-                      if (parent) {
-                        parent.innerHTML =
-                          '<div class="placeholder-hero"><span class="hero-icon">🏠</span></div>';
-                      }
-                    }}
-                  />
+                  <div className="image-container">
+                    <img
+                      src={propertyImages[selectedImageIndex]}
+                      alt={property.houseName || property.title}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                        const parent = (e.target as HTMLImageElement)
+                          .parentElement;
+                        if (parent) {
+                          parent.innerHTML =
+                            '<div class="placeholder-hero"><span class="hero-icon">🏠</span></div>';
+                        }
+                      }}
+                    />
+                    {imageAmounts[selectedImageIndex] && imageAmounts[selectedImageIndex]! > 0 && (
+                      <div className="image-amount-badge">
+                        💰 ${(imageAmounts[selectedImageIndex]! / 1000000).toFixed(2)} USDC
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="placeholder-hero">
                     <span className="hero-icon">🏠</span>
                   </div>
                 )}
-                <div className="image-badge">✓ Verified</div>
+                <div className="image-badge">Verified</div>
               </div>
 
               {propertyImages.length > 1 && (
@@ -333,6 +308,11 @@ const PropertyDetails = ({
                           (e.target as HTMLImageElement).style.display = "none";
                         }}
                       />
+                      {imageAmounts[idx] && imageAmounts[idx]! > 0 && (
+                        <div className="thumbnail-amount-badge">
+                          ${(imageAmounts[idx]! / 1000000).toFixed(2)}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -350,11 +330,11 @@ const PropertyDetails = ({
 
               <div className="property-badges">
                 <span className="badge">
-                  🛏️ {bedrooms} Bedroom{bedrooms > 1 ? "s" : ""}
+                  {bedrooms} Bedroom{bedrooms > 1 ? "s" : ""}
                 </span>
-                <span className="badge verified">✓ Verified</span>
-                <span className="badge secure">🔒 Secure</span>
-                <span className="badge available">✓ Available</span>
+                <span className="badge verified">Verified</span>
+                <span className="badge secure">Secure</span>
+                <span className="badge available">Available</span>
               </div>
 
               <div className="pricing-card">
@@ -388,24 +368,20 @@ const PropertyDetails = ({
                   <span className="stat-label">Total Units</span>
                 </div>
                 <div className="stat-item">
-                  <span className="stat-icon">🛏️</span>
-                  <span className="stat-value">{bedrooms}</span>
                   <span className="stat-label">Bedrooms</span>
+                  <span className="stat-value">{bedrooms}</span>
                 </div>
                 <div className="stat-item">
-                  <span className="stat-icon">🚿</span>
-                  <span className="stat-value">{bathrooms}</span>
                   <span className="stat-label">Bathrooms</span>
+                  <span className="stat-value">{bathrooms}</span>
                 </div>
                 <div className="stat-item">
-                  <span className="stat-icon">📐</span>
-                  <span className="stat-value">{area}</span>
                   <span className="stat-label">Area</span>
+                  <span className="stat-value">{area}</span>
                 </div>
               </div>
 
               <div className="blockchain-verification">
-                <span className="verification-icon">🔗</span>
                 <div className="verification-details">
                   <span className="verification-label">
                     Blockchain Verified
@@ -445,9 +421,10 @@ const PropertyDetails = ({
                       </div>
                       <span className={`status-pill ${apartment.status}`}>
                         {apartment.status === "occupied"
-                          ? "✓ Occupied"
-                          : "○ Available"}
-                      </span>
+                        ? "Occupied"
+                          : "Available"
+                        }
+                      // </span>
                     </div>
 
                     {apartment.status === "occupied" ? (
@@ -492,102 +469,12 @@ const PropertyDetails = ({
         </div>
 
         {/* Right Side - Chat Section */}
-        <div className="chat-section">
-          {hasAccess ? (
-            <div className="chat-container">
-              <div className="chat-header-section">
-                <div className="caretaker-profile">
-                  <div className="caretaker-avatar">👤</div>
-                  <div className="caretaker-info">
-                    <h4>Property Manager</h4>
-                    <span className="online-indicator">🟢 Online now</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="chat-messages-area">
-                {messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`chat-message ${message.sender}`}
-                  >
-                    <div className="message-content">
-                      <p>{message.text}</p>
-                      <span className="message-timestamp">
-                        {message.timestamp.toLocaleTimeString("en-US", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-
-                {isTyping && (
-                  <div className="chat-message caretaker">
-                    <div className="message-content typing">
-                      <div className="typing-dots">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="quick-actions">
-                <button
-                  className="quick-action-btn"
-                  onClick={() => {
-                    setInputMessage("Schedule a viewing");
-                    setTimeout(handleSendMessage, 100);
-                  }}
-                >
-                  📅 Schedule Viewing
-                </button>
-                <button
-                  className="quick-action-btn"
-                  onClick={() => {
-                    setInputMessage("What's included?");
-                    setTimeout(handleSendMessage, 100);
-                  }}
-                >
-                  ❓ What's Included
-                </button>
-              </div>
-
-              <div className="chat-input-area">
-                <input
-                  type="text"
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
-                  placeholder="Type your message..."
-                  className="chat-input-field"
-                />
-                <button
-                  className="chat-send-btn"
-                  onClick={handleSendMessage}
-                  disabled={!inputMessage.trim()}
-                >
-                  <span>➤</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="chat-locked">
-              {/* <h3>Chat Locked</h3>
-              <p>
-                Pay for access to message the property manager for 24 hours.
-              </p>
-              <button className="btn-pay-access" onClick={handlePayForAccess}>
-                <span>💳</span>
-                <span>Pay for Access</span>
-              </button> */}
-            </div>
-          )}
-        </div>
+        <CaretakerChatSection
+          caretakerName="Property Manager"
+          propertyTitle={property?.title || property?.houseName || "Property"}
+          isPaymentVerified={hasAccess}
+          onClose={() => setShowPayment(false)}
+        />
       </div>
 
       {/* Payment Modal */}

@@ -1,80 +1,57 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import DashboardOverview from './DashboardOverview'
 import MyInventory from '../MyInventory'
 import AddNewListing from '../AddNewListing'
 import PropertyDetails from '../PropertyDetails'
+import { apiRequest, API_CONFIG } from '../../lib/api-config'
+import { useSui } from '../../sui/SuiProviders'
 import type { Property } from '../../types'
 import '../../styles/Dashboard.css'
 
 const CaretakerDashboard = () => {
+  const { account } = useSui()
   const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'addNew'>('overview')
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null)
-  
-  // Mock data - will be replaced with Walrus/Sui blockchain data
-  const [properties, setProperties] = useState<Property[]>([
-    {
-      id: 'prop_1',
-      houseName: 'Afasa Lounges',
-      address: 'No 15 Ogbowodeci',
-      apartments: [
-        {
-          id: 'apt_1',
-          number: 1,
-          tenant: 'James Michael',
-          possessionDate: 'Jan 1st 2025',
-          expiryDate: 'Jan 1st 2026',
-          pricing: '$25,000',
-          status: 'occupied'
-        },
-        {
-          id: 'apt_2',
-          number: 2,
-          tenant: null,
-          possessionDate: '',
-          expiryDate: '',
-          pricing: '$25,000',
-          status: 'vacant'
-        }
-      ],
-      totalEarnings: 25000,
-      images: [],
-      pricing: '$25,000/year'
-    },
-    {
-      id: 'prop_2',
-      houseName: 'Beverly Homes',
-      address: '15 Main Street, CA',
-      apartments: [
-        {
-          id: 'apt_3',
-          number: 1,
-          tenant: 'Sarah Johnson',
-          possessionDate: 'Mar 1st 2025',
-          expiryDate: 'Mar 1st 2026',
-          pricing: '$30,000',
-          status: 'occupied'
-        },
-        {
-          id: 'apt_4',
-          number: 2,
-          tenant: 'Mike Brown',
-          possessionDate: 'Feb 15th 2025',
-          expiryDate: 'Feb 15th 2026',
-          pricing: '$30,000',
-          status: 'occupied'
-        }
-      ],
-      totalEarnings: 60000,
-      images: [],
-      pricing: '$30,000/year'
+  const [properties, setProperties] = useState<Property[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0) // Force refresh key
+
+  // Fetch caretaker's properties from API
+  const fetchProperties = async () => {
+    if (!account) {
+      setLoading(false)
+      return
     }
-  ])
+
+    try {
+      setLoading(true)
+      setError(null)
+      const endpoint = API_CONFIG.endpoints.properties.byCaretaker(account)
+      const data = await apiRequest<any>(endpoint)
+      setProperties((data.data || data || []) as Property[])
+    } catch (err) {
+      console.error('Failed to fetch caretaker properties:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load properties')
+      setProperties([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchProperties()
+  }, [account, refreshKey])
 
   const totalMonthlyEarnings = properties.reduce((sum, prop) => sum + prop.totalEarnings, 0)
 
   const handleAddProperty = (newProperty: Property) => {
-    setProperties([...properties, newProperty])
+    setProperties([newProperty, ...properties])
     setActiveTab('inventory')
+    // Trigger a refresh after a short delay to sync with backend
+    setTimeout(() => {
+      setRefreshKey(prev => prev + 1)
+    }, 2000)
   }
 
   const handleViewDetails = (property: Property) => {

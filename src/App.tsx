@@ -4,8 +4,10 @@ import LocationSelector from './components/LocationSelector'
 import PropertyList from './components/PropertyList'
 import PropertyDetails from './components/PropertyDetails'
 import CaretakerDashboard from './components/Caretaker/CaretakerDashboard'
+import WalletBalance from './components/WalletBalance'
 import { useSui } from './sui/SuiProviders'
 import './styles/App.css'
+import './styles/WalletBalance.css'
 import caretakerWhitelistRaw from './walrus/caretakers.txt?raw'
 
 interface Location {
@@ -75,11 +77,12 @@ function AppContent() {
           </a>
         </div>
         <div className="header-actions-group">
+          {isConnected && <WalletBalance showAddress={true} />}
           <button 
             className="mode-switch"
             onClick={handleToggleView}
           >
-            {viewMode === 'customer' ? 'Caretaker Portal' : '👤 Customer View'}
+            {viewMode === 'customer' ? 'Caretaker Portal' : 'Customer View'}
           </button>
           <div className="wallet-button-wrapper">
             <button 

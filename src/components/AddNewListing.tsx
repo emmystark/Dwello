@@ -8,6 +8,51 @@ interface AddNewListingProps {
   onAddProperty: (property: Property) => void;
 }
 
+const countries = [
+  'United States', 'United Kingdom', 'Canada', 'Australia', 'Germany',
+  'France', 'Spain', 'Italy', 'Netherlands', 'Switzerland', 'Sweden',
+  'Norway', 'Denmark', 'Japan', 'South Korea', 'Singapore', 'Hong Kong',
+  'United Arab Emirates', 'Saudi Arabia', 'Nigeria', 'South Africa', 'Kenya',
+  'Ghana', 'Egypt', 'Brazil', 'Mexico', 'Argentina', 'Chile', 'India',
+  'China', 'Thailand', 'Indonesia', 'Malaysia', 'Philippines', 'New Zealand'
+];
+
+const statesByCountry: { [key: string]: string[] } = {
+  'United States': [
+    'California', 'Texas', 'Florida', 'New York', 'Illinois', 'Pennsylvania',
+    'Ohio', 'Georgia', 'North Carolina', 'Michigan', 'Washington', 'Arizona'
+  ],
+  'United Kingdom': ['England', 'Scotland', 'Wales', 'Northern Ireland'],
+  'Canada': ['Ontario', 'Quebec', 'British Columbia', 'Alberta', 'Manitoba'],
+  'Nigeria': ['Lagos', 'Abuja (FCT)', 'Kano', 'Rivers', 'Oyo', 'Kaduna', 'Edo'],
+  'Australia': ['New South Wales', 'Victoria', 'Queensland', 'Western Australia'],
+  'Germany': ['Bavaria', 'Berlin', 'Hamburg', 'Hesse', 'North Rhine-Westphalia'],
+  'United Arab Emirates': ['Dubai', 'Abu Dhabi', 'Sharjah', 'Ajman'],
+  'France': ['Île-de-France', 'Provence-Alpes-Côte d\'Azur', 'Auvergne-Rhône-Alpes'],
+  'India': ['Maharashtra', 'Delhi', 'Karnataka', 'Tamil Nadu', 'Gujarat'],
+  'Brazil': ['São Paulo', 'Rio de Janeiro', 'Minas Gerais', 'Bahia'],
+};
+
+const citiesByState: { [key: string]: string[] } = {
+  'California': ['Los Angeles', 'San Francisco', 'San Diego', 'San Jose', 'Sacramento'],
+  'Texas': ['Houston', 'Dallas', 'Austin', 'San Antonio', 'Fort Worth'],
+  'New York': ['New York City', 'Buffalo', 'Rochester', 'Yonkers', 'Syracuse'],
+  'Florida': ['Miami', 'Orlando', 'Tampa', 'Jacksonville', 'Fort Lauderdale'],
+  'England': ['London', 'Manchester', 'Birmingham', 'Liverpool', 'Leeds', 'Bristol'],
+  'Scotland': ['Edinburgh', 'Glasgow', 'Aberdeen', 'Dundee'],
+  'Ontario': ['Toronto', 'Ottawa', 'Mississauga', 'Hamilton', 'London'],
+  'British Columbia': ['Vancouver', 'Victoria', 'Surrey', 'Burnaby', 'Richmond'],
+  'Lagos': ['Ikeja', 'Victoria Island', 'Lekki', 'Ikoyi', 'Surulere', 'Yaba'],
+  'Abuja (FCT)': ['Central Area', 'Garki', 'Wuse', 'Maitama', 'Asokoro', 'Gwarinpa'],
+  'Edo': ['Benin City', 'Benin'],
+  'Dubai': ['Downtown Dubai', 'Dubai Marina', 'Jumeirah', 'Business Bay', 'JBR'],
+  'Abu Dhabi': ['Abu Dhabi City', 'Al Ain', 'Khalifa City', 'Yas Island'],
+  'New South Wales': ['Sydney', 'Newcastle', 'Wollongong', 'Central Coast'],
+  'Victoria': ['Melbourne', 'Geelong', 'Ballarat', 'Bendigo'],
+  'Bavaria': ['Munich', 'Nuremberg', 'Augsburg', 'Regensburg'],
+  'Berlin': ['Mitte', 'Charlottenburg', 'Kreuzberg', 'Friedrichshain'],
+};
+
 const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
   const [formData, setFormData] = useState({
     houseName: '',
@@ -21,6 +66,9 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
     bathrooms: '',
   });
 
+  const [availableStates, setAvailableStates] = useState<string[]>([]);
+  const [availableCities, setAvailableCities] = useState<string[]>([]);
+
   const [apartments, setApartments] = useState<Partial<Apartment>[]>([
     { number: 1, tenant: null, status: 'vacant', pricing: '' },
   ]);
@@ -32,9 +80,21 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
   const [uploadedBlobIds, setUploadedBlobIds] = useState<string[]>([]);
   const { createHouseAndGetId } = useDwelloPayments();
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    
+    if (name === 'country') {
+      const states = statesByCountry[value] || [];
+      setAvailableStates(states);
+      setFormData((prev) => ({ ...prev, country: value, state: '', city: '' }));
+      setAvailableCities([]);
+    } else if (name === 'state') {
+      const cities = citiesByState[value] || [];
+      setAvailableCities(cities);
+      setFormData((prev) => ({ ...prev, state: value, city: '' }));
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleApartmentCountChange = (count: number) => {
@@ -121,21 +181,35 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
     }
 
     try {
-      const houseId = await createHouseAndGetId(
-        formData.houseName,
-        formData.address,
-        formData.country,
-        formData.state,
-        formData.city,
-        formData.pricing,
-        formData.bedrooms,
-        formData.bathrooms,
-      );
+      // Try to create house on-chain, but fallback to local ID if it fails
+      let houseId = `prop_${Date.now()}`;
+      try {
+        houseId = await createHouseAndGetId(
+          formData.houseName,
+          formData.address,
+          formData.country,
+          formData.state,
+          formData.city,
+          formData.pricing,
+          formData.bedrooms,
+          formData.bathrooms,
+        ) || houseId;
+      } catch (onChainError) {
+        console.warn('On-chain house creation failed, using local ID:', onChainError);
+        // Continue with local property ID instead of failing
+      }
 
       const imageUrls = uploadedBlobIds.map((blobId) => getWalrusBlobUrl(blobId));
 
       const bedrooms = parseInt(formData.bedrooms || '1', 10);
       const bathrooms = parseInt(formData.bathrooms || '1', 10);
+
+      const imagesWithAmounts = uploadedBlobIds.map((blobId) => ({
+        blobId,
+        url: getWalrusBlobUrl(blobId),
+        amount: 0,
+        uploadedAt: new Date().toISOString(),
+      }));
 
       const newProperty: Property = {
         id: houseId || `prop_${Date.now()}`,
@@ -152,7 +226,7 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
           status: apt.status || 'vacant',
         })),
         totalEarnings: 0,
-        images: imageUrls,
+        images: imagesWithAmounts,
         blobIds: uploadedBlobIds,
         title: `${bedrooms} Bedroom Apartment`,
         location: `${formData.city || formData.state}, ${formData.country}`,
@@ -162,7 +236,7 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
         type: 'Apartment',
         price: formData.pricing,
         currency: '',
-        imageUrl: imageUrls[0],
+        imageUrl: imagesWithAmounts[0]?.url || '',
       };
 
       onAddProperty(newProperty);
@@ -202,10 +276,11 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
         console.warn('Failed to store public listing:', storageError);
       }
 
-      alert('Property successfully added to the blockchain.');
+      alert('Property successfully added!');
     } catch (error) {
-      console.error('Failed to create house on-chain:', error);
-      alert('Failed to create house on-chain. Please try again.');
+      console.error('Failed to add property:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      alert(`Failed to add property: ${errorMsg}`);
       return;
     }
 
@@ -233,11 +308,10 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
       <div className="form-container">
         <div className="form-header">
           <div className="header-content">
-            <h2>🏠 Add New Property</h2>
+            <h2>Add New Property</h2>
             <p>Fill in the details to list your property on the blockchain</p>
           </div>
           <div className="blockchain-indicator">
-            <span className="blockchain-icon">🔗</span>
             <span>Walrus Storage</span>
           </div>
         </div>
@@ -246,7 +320,6 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
           {/* Property Information */}
           <div className="form-section">
             <div className="section-title">
-              <span className="section-icon">📝</span>
               <h3>Property Information</h3>
             </div>
 
@@ -320,39 +393,58 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
             <div className="form-grid">
               <div className="form-group">
                 <label>Country *</label>
-                <input
-                  type="text"
+                <select
                   name="country"
                   value={formData.country}
                   onChange={handleInputChange}
-                  placeholder="e.g., Nigeria"
                   required
-                />
+                >
+                  <option value="">Select Country</option>
+                  {countries.map((country) => (
+                    <option key={country} value={country}>
+                      {country}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div className="form-group">
-                <label>State / Region *</label>
-                <input
-                  type="text"
-                  name="state"
-                  value={formData.state}
-                  onChange={handleInputChange}
-                  placeholder="e.g., Lagos"
-                  required
-                />
-              </div>
+              {formData.country && availableStates.length > 0 && (
+                <div className="form-group">
+                  <label>State / Region *</label>
+                  <select
+                    name="state"
+                    value={formData.state}
+                    onChange={handleInputChange}
+                    required
+                  >
+                    <option value="">Select State/Region</option>
+                    {availableStates.map((state) => (
+                      <option key={state} value={state}>
+                        {state}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-              <div className="form-group">
-                <label>City / Area *</label>
-                <input
-                  type="text"
-                  name="city"
-                  value={formData.city}
-                  onChange={handleInputChange}
-                  placeholder="e.g., Ikeja"
-                  required
-                />
-              </div>
+              {formData.state && availableCities.length > 0 && (
+                <div className="form-group">
+                  <label>City / Area *</label>
+                  <select
+                    name="city"
+                    value={formData.city}
+                    onChange={handleInputChange}
+                    required
+                  >
+                    <option value="">Select City/Area</option>
+                    {availableCities.map((city) => (
+                      <option key={city} value={city}>
+                        {city}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="form-grid">
@@ -386,7 +478,6 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
           {/* Image Upload */}
           <div className="form-section">
             <div className="section-title">
-              <span className="section-icon">📸</span>
               <h3>Property Images</h3>
             </div>
 
@@ -402,7 +493,7 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
               
               <label htmlFor="file-upload" className="upload-area">
                 <div className="upload-content">
-                  <div className="upload-icon">📸</div>
+                  <div className="upload-icon"></div>
                   <p className="upload-title">Click to upload or drag and drop</p>
                   <p className="upload-subtitle">PNG, JPG, MP4 up to 10MB each</p>
                   <div className="upload-button">
@@ -444,7 +535,6 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
                         </>
                       ) : (
                         <>
-                          <span>🔗</span>
                           <span>Upload to Walrus</span>
                         </>
                       )}
@@ -453,7 +543,7 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
 
                   {uploadedBlobIds.length > 0 && (
                     <div className="upload-success">
-                      <span className="success-icon">✓</span>
+                      <span className="success-icon"></span>
                       <span>Successfully uploaded {uploadedBlobIds.length} files to Walrus</span>
                     </div>
                   )}
@@ -474,7 +564,6 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
           {/* Apartments Details */}
           <div className="form-section">
             <div className="section-title">
-              <span className="section-icon">🏢</span>
               <h3>Apartments Details</h3>
             </div>
 
@@ -483,7 +572,6 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
                 <div key={index} className="apartment-item">
                   <div className="apartment-header">
                     <h4>
-                      <span className="apt-icon">🚪</span>
                       Apartment {index + 1}
                     </h4>
                     <button
@@ -547,7 +635,6 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
           {/* Form Actions */}
           <div className="form-actions">
             <button type="button" className="btn-cancel">
-              <span>✕</span>
               <span>Cancel</span>
             </button>
             <button 
@@ -555,7 +642,6 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
               className="btn-submit"
               disabled={uploading || (selectedFiles.length > 0 && uploadedBlobIds.length === 0)}
             >
-              <span>🔗</span>
               <span>Add to Blockchain</span>
             </button>
           </div>

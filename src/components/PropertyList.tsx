@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { getWalrusBlobUrl } from '../walrus/client';
 import { useNavigate } from "react-router-dom";
-import bedroomBlobIds from '../walrus/bloblds';
+import { apiRequest, API_CONFIG } from '../lib/api-config';
+import type { Property } from '../types';
 
 interface Location {
   country?: string;
@@ -9,161 +10,55 @@ interface Location {
   city?: string;
 }
 
-interface Property {
-  id: string;
-  title: string;
-  location: string;
-  price: string;
-  currency: string;
-  bedrooms: number;
-  bathrooms: number;
-  area: string;
-  type: string;
-  walrusId: string;
-  imageUrl?: string;
-}
-
 interface PropertyListProps {
   location?: Location;
 }
 
-const generateMockProperties = async (location: Location = {}): Promise<Property[]> => {
-  const country = location.country || "Unknown";
-  const state = location.state || "";
-  const city = location.city || "";
-
-  let publicListings: Property[] = [];
+const fetchPropertiesFromBackend = async (location: Location = {}): Promise<Property[]> => {
   try {
-    const raw = localStorage.getItem('dwelloListings');
-    if (raw) {
-      const stored = JSON.parse(raw) as any[];
+    // Fetch all properties from backend API using centralized config
+    const data = await apiRequest<any>(API_CONFIG.endpoints.properties.list);
+    
+    let properties: Property[] = (data.data || data || []).map((p: any) => ({
+      ...p,
+      title: p.title || p.houseName || 'Property',
+      location: p.address || `${p.city}, ${p.state}`,
+      price: p.price?.toString() || '0',
+      currency: p.currency || '$',
+      type: p.propertyType || p.type || 'Property',
+    }));
 
+    // Filter by location if provided
+    if (location.country || location.state || location.city) {
       const normalize = (value: string | undefined | null) =>
         (value || '').trim().toLowerCase();
 
-      const normCountry = normalize(country);
-      const normState = normalize(state);
-      const normCity = normalize(city);
+      const normCountry = normalize(location.country);
+      const normState = normalize(location.state);
+      const normCity = normalize(location.city);
 
-      publicListings = stored
-        .filter((p) => {
-          const pCountry = normalize(p.country);
-          const pState = normalize(p.state);
-          const pCity = normalize(p.city);
+      properties = properties.filter((p: any) => {
+        const pCountry = normalize(p.country);
+        const pState = normalize(p.state);
+        const pCity = normalize(p.city);
 
-          if (normCity) {
-            // If a city is selected, require full country+state+city match
-            return (
-              pCountry === normCountry &&
-              pState === normState &&
-              pCity === normCity
-            );
-          }
+        if (normCity) {
+          return (
+            pCountry === normCountry &&
+            pState === normState &&
+            pCity === normCity
+          );
+        }
 
-          // If no city is selected, match by country+state only
-          return pCountry === normCountry && pState === normState;
-        })
-        .map((p) => ({
-          id: p.id,
-          title: p.title,
-          location: p.location,
-          price: p.price,
-          currency: p.currency,
-          bedrooms: p.bedrooms,
-          bathrooms: p.bathrooms,
-          area: p.area,
-          type: p.type,
-          walrusId: p.walrusId,
-          imageUrl: p.imageUrl,
-        }));
+        return pCountry === normCountry && pState === normState;
+      });
     }
+
+    return properties;
   } catch (error) {
-    console.warn('Failed to load public listings:', error);
+    console.error('Error fetching properties from backend:', error);
+    return [];
   }
-
-  const currencyMap: Record<string, string> = {
-    "United States": "$",
-    "United Kingdom": "£",
-    Canada: "CAD$",
-    Australia: "AUD$",
-    Germany: "€",
-    France: "€",
-    Spain: "€",
-    Italy: "€",
-    Nigeria: "₦",
-    "United Arab Emirates": "AED",
-    Japan: "¥",
-    India: "₹",
-    Brazil: "R$",
-  };
-  const currency = currencyMap[country] || "$";
-
-  const priceRanges: Record<string, [number, number]> = {
-    "United States": [250000, 2000000],
-    "United Kingdom": [200000, 1500000],
-    Nigeria: [15000000, 120000000],
-    "United Arab Emirates": [500000, 5000000],
-    Germany: [180000, 900000],
-    Australia: [350000, 2500000],
-    Canada: [300000, 1800000],
-    France: [200000, 1200000],
-  };
-  const [minPrice, maxPrice] = priceRanges[country] || [100000, 1000000];
-
-  const propertyTypes = [
-    "Apartment",
-    "House",
-    "Villa",
-    "Condo",
-    "Townhouse",
-    "Duplex",
-    "Penthouse",
-  ];
-
-  const properties: Property[] = [...publicListings];
-  // Prepare Walrus-backed images for each bedroom count
-  const walrusImageUrls: Record<number, string | null> = {
-    1: null,
-    2: null,
-    3: null,
-    4: null,
-  };
-
-  try {
-    for (const count of [1, 2, 3, 4]) {
-      const availableBlobIds = bedroomBlobIds[count] || [];
-      if (availableBlobIds.length > 0) {
-        const firstEntry = availableBlobIds[0];
-        const blobId = firstEntry.includes(': ') ? firstEntry.split(': ')[1] : firstEntry;
-        walrusImageUrls[count] = getWalrusBlobUrl(blobId);
-      }
-    }
-  } catch (error) {
-    console.warn("Failed to load Walrus images for bedrooms:", error);
-  }
-
-  for (let i = 0; i < 8; i++) {
-    const bedrooms = Math.floor(Math.random() * 4) + 1;
-    const bathrooms = Math.floor(Math.random() * 3) + 1;
-    const sqm = Math.floor(Math.random() * 200) + 50;
-    const price = Math.floor(Math.random() * (maxPrice - minPrice) + minPrice);
-    const type = propertyTypes[Math.floor(Math.random() * propertyTypes.length)];
-
-    properties.push({
-      id: `prop_${i + 1}_${Date.now()}`,
-      title: `${bedrooms} Bedroom ${type}`,
-      location: `${city || state}, ${country}`,
-      price: price.toLocaleString(),
-      currency,
-      bedrooms,
-      bathrooms,
-      area: `${sqm} sqm`,
-      type,
-      walrusId: `walrus_${Math.random().toString(36).substring(2, 15)}`,
-      imageUrl: walrusImageUrls[bedrooms] || undefined,
-    });
-  }
-  return properties;
 };
 
 const PropertyList = ({ location }: PropertyListProps) => {
@@ -179,14 +74,15 @@ const PropertyList = ({ location }: PropertyListProps) => {
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const props = await generateMockProperties(location);
+        const props = await fetchPropertiesFromBackend(location);
         setProperties(props);
       } catch (error) {
-        console.error("Error generating properties:", error);
+        console.error("Error fetching properties:", error);
+        setProperties([]);
       } finally {
         setLoading(false);
       }
-    }, 1500);
+    }, 500);
     return () => clearTimeout(timer);
   }, [location]);
 
@@ -209,7 +105,7 @@ const PropertyList = ({ location }: PropertyListProps) => {
     return (
       <div className="loading">
         <div className="spinner"></div>
-        <p>🔍 Searching Walrus blockchain for properties...</p>
+        <p>Searching Walrus blockchain for properties...</p>
       </div>
     );
   }
@@ -257,7 +153,7 @@ const PropertyList = ({ location }: PropertyListProps) => {
                 )}
               </div>
 
-              <div className="property-badge">✓ Verified</div>
+              <div className="property-badge">Verified</div>
             </div>
 
             <div className="property-details">
@@ -268,12 +164,12 @@ const PropertyList = ({ location }: PropertyListProps) => {
                 {property.price}
               </p>
               <div className="property-features">
-                <span>🛏️ {property.bedrooms} beds</span>
-                <span>🚿 {property.bathrooms} baths</span>
-                <span>📐 {property.area}</span>
+                <span>{property.bedrooms} beds</span>
+                <span>{property.bathrooms} baths</span>
+                <span>{property.area}</span>
               </div>
               <div className="blockchain-info">
-                <span className="walrus-badge">🔗 Walrus</span>
+                <span className="walrus-badge">Walrus</span>
                 <small title={property.walrusId}>
                   ID: {property.walrusId.substring(0, 12)}...
                 </small>
