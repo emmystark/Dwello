@@ -38,7 +38,6 @@ export const CaretakerChatSection: React.FC<CaretakerChatSectionProps> = ({
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -90,7 +89,6 @@ export const CaretakerChatSection: React.FC<CaretakerChatSectionProps> = ({
     // Send message to backend API
     if (propertyId) {
       try {
-        setIsSending(true);
         await apiRequest(API_CONFIG.endpoints.messages.send, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -102,8 +100,6 @@ export const CaretakerChatSection: React.FC<CaretakerChatSectionProps> = ({
         });
       } catch (error) {
         console.error('Failed to send message:', error);
-      } finally {
-        setIsSending(false);
       }
     }
 

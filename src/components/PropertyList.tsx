@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { getWalrusBlobUrl } from '../walrus/client';
 import { useNavigate } from "react-router-dom";
 import { apiRequest, API_CONFIG } from '../lib/api-config';
 import type { Property } from '../types';
@@ -171,7 +170,7 @@ const PropertyList = ({ location }: PropertyListProps) => {
               <div className="blockchain-info">
                 <span className="walrus-badge">Walrus</span>
                 <small title={property.walrusId}>
-                  ID: {property.walrusId.substring(0, 12)}...
+                  ID: {(property.walrusId || property.id || 'N/A').substring(0, 12)}...
                 </small>
               </div>
               

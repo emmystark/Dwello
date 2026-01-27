@@ -13,29 +13,23 @@ const CaretakerDashboard = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'addNew'>('overview')
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null)
   const [properties, setProperties] = useState<Property[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [refreshKey, setRefreshKey] = useState(0) // Force refresh key
+  const [refreshKey, setRefreshKey] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(6)
 
   // Fetch caretaker's properties from API
   const fetchProperties = async () => {
     if (!account) {
-      setLoading(false)
       return
     }
 
     try {
-      setLoading(true)
-      setError(null)
       const endpoint = API_CONFIG.endpoints.properties.byCaretaker(account)
       const data = await apiRequest<any>(endpoint)
       setProperties((data.data || data || []) as Property[])
     } catch (err) {
       console.error('Failed to fetch caretaker properties:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load properties')
       setProperties([])
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -44,6 +38,11 @@ const CaretakerDashboard = () => {
   }, [account, refreshKey])
 
   const totalMonthlyEarnings = properties.reduce((sum, prop) => sum + prop.totalEarnings, 0)
+
+  const indexOfLastItem = currentPage * itemsPerPage
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage
+  const currentProperties = properties.slice(indexOfFirstItem, indexOfLastItem)
+  const totalPages = Math.ceil(properties.length / itemsPerPage)
 
   const handleAddProperty = (newProperty: Property) => {
     setProperties([newProperty, ...properties])
@@ -143,10 +142,21 @@ const CaretakerDashboard = () => {
           )}
           
           {activeTab === 'inventory' && (
-            <MyInventory 
-              properties={properties}
-              onViewDetails={handleViewDetails}
-            />
+            <>
+              <MyInventory 
+                properties={currentProperties}
+                onViewDetails={handleViewDetails}
+              />
+              {totalPages > 1 && (
+                <div className="pagination">
+                  <button className="page-btn" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>First</button>
+                  <button className="page-btn" disabled={currentPage === 1} onClick={() => setCurrentPage(currentPage - 1)}>Prev</button>
+                  <span className="page-info">Page {currentPage} of {totalPages}</span>
+                  <button className="page-btn" disabled={currentPage === totalPages} onClick={() => setCurrentPage(currentPage + 1)}>Next</button>
+                  <button className="page-btn" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>Last</button>
+                </div>
+              )}
+            </>
           )}
           
           {activeTab === 'addNew' && (

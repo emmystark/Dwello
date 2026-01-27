@@ -1,5 +1,5 @@
 import type { Property } from '../types'
-import WalletBalance from './WalletBalance'
+import { getWalrusBlobUrl } from '../walrus/client'
 
 interface MyInventoryProps {
   properties: Property[]
@@ -33,7 +33,17 @@ const MyInventory = ({ properties, onViewDetails }: MyInventoryProps) => {
           return (
             <div key={property.id} className="inventory-card">
               <div className="inventory-image">
-                <div className="placeholder-bg">
+                {property.images && property.images.length > 0 && property.images[0]?.blobId ? (
+                  <img 
+                    src={getWalrusBlobUrl(property.images[0].blobId)} 
+                    alt={property.houseName}
+                    className="card-image"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : null}
+                <div className="placeholder-bg" style={{display: (property.images && property.images.length > 0 && property.images[0]?.blobId) ? 'none' : 'flex'}}>
                   <span className="building-icon">🏢</span>
                 </div>
                 <div className="occupancy-badge">
