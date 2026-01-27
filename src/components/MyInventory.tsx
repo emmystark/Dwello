@@ -1,4 +1,5 @@
 import type { Property } from '../types'
+import WalletBalance from './WalletBalance'
 import { getWalrusBlobUrl } from '../walrus/client'
 
 interface MyInventoryProps {
