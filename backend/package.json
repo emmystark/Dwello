@@ -1,0 +1,39 @@
+{
+  "name": "dwello-backend",
+  "version": "1.0.0",
+  "description": "Dwello backend server with Walrus SDK integration",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node api.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "express",
+    "walrus",
+    "sui",
+    "blockchain",
+    "backend"
+  ],
+  "author": "Dwello Team",
+  "license": "MIT",
+  "dependencies": {
+    "@mysten/sui": "^1.45.0",
+    "@mysten/sui.js": "^0.54.1",
+    "@mysten/walrus": "^0.8.4",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.1",
+    "form-data": "^4.0.5",
+    "multer": "^1.4.5-lts.1",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

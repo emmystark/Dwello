@@ -1,8 +1,9 @@
-// Walrus storage client utilities
+// Walrus storage client utilities using Walrus SDK
 import { SuiClient, getFullnodeUrl } from '@mysten/sui/client';
+import { WalrusClient, WalrusFile } from '@mysten/walrus';
 
 // Aggregator is recommended for reads, publisher for writes (see https://docs.wal.app/usage/web-api.html)
-const WALRUS_AGGREGATOR_URL =  'https://aggregator.walrus-testnet.walrus.space';
+const WALRUS_AGGREGATOR_URL = 'https://aggregator.walrus-testnet.walrus.space';
 const WALRUS_PUBLISHER_URL = 'https://publisher.walrus-testnet.walrus.space';
 
 // Shared Sui client (testnet) for reading transaction blocks, events, etc.
@@ -10,9 +11,17 @@ export const suiClient = new SuiClient({
   url: getFullnodeUrl('testnet'),
 });
 
+// Initialize Walrus client
+export const walrusClient = new WalrusClient({
+  aggregatorUrl: WALRUS_AGGREGATOR_URL,
+  publisherUrl: WALRUS_PUBLISHER_URL,
+});
+
 export interface UploadResult {
   blobId: string;
   url: string;
+  bytes?: Uint8Array;
+  tags?: Record<string, string>;
 }
 
 export interface PaymentStatus {
@@ -112,53 +121,61 @@ export const verifyPaymentAndBlob = async (
 };
 
 /**
- * Upload file to Walrus storage
+ * Upload file to Walrus using SDK (without signer - requires backend)
+ * For signer-based uploads, backend must handle it
  */
-export const uploadToWalrus = async (file: File): Promise<UploadResult> => {
+export const uploadToWalrus = async (file: File, metadata?: { title?: string; amount?: string }): Promise<UploadResult> => {
   try {
-    // Upload to Walrus HTTP API on the publisher. See https://docs.wal.app/usage/web-api.html
-    const url = `${WALRUS_PUBLISHER_URL}/v1/blobs?epochs=3&deletable=true`;
-    const response = await fetch(url, {
-      method: 'PUT',
-      body: file,
-      headers: {
-        'Content-Type': file.type || 'application/octet-stream',
-      },
+    // Send to backend which handles signer and SDK upload
+    const formData = new FormData();
+    formData.append('file', file);
+    if (metadata?.title) formData.append('title', metadata.title);
+    if (metadata?.amount) formData.append('amount', metadata.amount);
+
+    const response = await fetch('/api/walrus/upload', {
+      method: 'POST',
+      body: formData,
     });
 
     if (!response.ok) {
-      let extra = '';
-      try {
-        const text = await response.text();
-        extra = text ? ` Body: ${text}` : '';
-      } catch {
-        // ignore
-      }
-      throw new Error(`Upload failed: HTTP ${response.status} ${response.statusText}.${extra}`);
+      const error = await response.json();
+      throw new Error(error.error || `Upload failed: ${response.statusText}`);
     }
 
     const result = await response.json();
-
-    // Extract blob ID from response (HTTP API typically returns blob_id)
-    const blobId =
-      result.blob_id ??
-      result.blobId ??
-      result.id ??
-      result.cid ??
-      result.hash ??
-      result.newlyCreated?.blobObject?.blobId ??
-      result.alreadyCertified?.blobId;
-
-    if (!blobId) {
-      throw new Error('No blob ID returned from Walrus');
-    }
-
     return {
-      blobId,
-      url: getWalrusBlobUrl(blobId),
+      blobId: result.blobId,
+      url: getWalrusBlobUrl(result.blobId),
+      bytes: result.bytes,
+      tags: result.tags,
     };
   } catch (error) {
     console.error('Walrus upload error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Retrieve file from Walrus using SDK
+ */
+export const getWalrusFile = async (blobId: string): Promise<UploadResult> => {
+  try {
+    // Retrieve from backend which uses SDK to fetch
+    const response = await fetch(`/api/walrus/file/${blobId}`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch file: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return {
+      blobId,
+      url: getWalrusBlobUrl(blobId),
+      bytes: result.bytes ? new Uint8Array(result.bytes) : undefined,
+      tags: result.tags,
+    };
+  } catch (error) {
+    console.error('Walrus fetch error:', error);
     throw error;
   }
 };

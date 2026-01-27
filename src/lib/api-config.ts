@@ -108,8 +108,14 @@ export async function apiRequest<T = any>(
         // Try to parse error message from response
         let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
         try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorData.message || errorMessage;
+          const contentType = response.headers.get('content-type');
+          if (contentType?.includes('application/json')) {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorData.message || errorMessage;
+          } else {
+            const text = await response.text();
+            errorMessage = text || errorMessage;
+          }
         } catch {
           // If response isn't JSON, use status text
         }
@@ -119,7 +125,26 @@ export async function apiRequest<T = any>(
         throw error;
       }
 
-      return await response.json() as T;
+      // Handle empty responses and invalid JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType?.includes('application/json')) {
+        const text = await response.text();
+        if (!text) {
+          return {} as T;
+        }
+        throw new Error('Response is not JSON');
+      }
+
+      const text = await response.text();
+      if (!text) {
+        return {} as T;
+      }
+
+      try {
+        return JSON.parse(text) as T;
+      } catch (e) {
+        throw new Error(`Failed to parse JSON response: ${e instanceof Error ? e.message : String(e)}`);
+      }
     } catch (error) {
       const isLastAttempt = attempt === retries;
       const isNetworkError =

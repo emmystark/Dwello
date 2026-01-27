@@ -14,6 +14,11 @@ import {
   isCaretaker,
   getCaretakerProperties,
 } from './payment-service.js';
+import {
+  uploadToWalrus,
+  getWalrusFile,
+  verifyWalrusFile,
+} from './walrus-service.js';
 
 dotenv.config();
 
@@ -113,74 +118,11 @@ async function requirePayment(req, res, next) {
 }
 
 /**
- * Upload file to Walrus
- */
-async function uploadToWalrus(filePath, fileName) {
-  try {
-    const fileStream = fs.createReadStream(filePath);
-    const fileStats = fs.statSync(filePath);
-
-    const url = `${WALRUS_PUBLISHER_URL}/v1/blobs?epochs=5&deletable=true`;
-
-    const response = await fetch(url, {
-      method: 'PUT',
-      body: fileStream,
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        'Content-Length': fileStats.size,
-      },
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`Upload failed: HTTP ${response.status} - ${text}`);
-    }
-
-    const result = await response.json();
-
-    const blobId =
-      result.blob_id ||
-      result.blobId ||
-      result.id ||
-      result.cid ||
-      result.newlyCreated?.blobObject?.blobId ||
-      result.alreadyCertified?.blobId;
-
-    if (!blobId) {
-      throw new Error('No blob ID returned from Walrus');
-    }
-
-    return {
-      blobId,
-      fileName,
-      mimeType: getMimeType(filePath),
-      url: `${WALRUS_AGGREGATOR_URL}/v1/blobs/${blobId}`,
-    };
-  } catch (error) {
-    console.error('Walrus upload error:', error);
-    throw error;
-  }
-}
-
-function getMimeType(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  const mimeTypes = {
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.png': 'image/png',
-    '.webp': 'image/webp',
-    '.gif': 'image/gif',
-    '.mp4': 'video/mp4',
-    '.webm': 'video/webm',
-  };
-  return mimeTypes[ext] || 'application/octet-stream';
-}
-
-/**
  * Property endpoints
  */
 
 // Create a new property listing
+// Supports both file uploads (multer) and JSON with pre-uploaded blob IDs
 app.post('/api/properties', upload.array('images', 10), async (req, res) => {
   try {
     const {
@@ -196,11 +138,9 @@ app.post('/api/properties', upload.array('images', 10), async (req, res) => {
       city,
       description,
       caretakerAddress,
+      imagesWithAmounts,
+      blobIds,
     } = req.body;
-
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: 'No images provided' });
-    }
 
     if (!houseName || !address || !price) {
       return res.status(400).json({
@@ -208,37 +148,65 @@ app.post('/api/properties', upload.array('images', 10), async (req, res) => {
       });
     }
 
-    // Upload all files to Walrus
-    const uploadedBlobs = [];
-    const primaryImage = {
-      blobId: null,
-      url: null,
-    };
+    let uploadedBlobs = [];
+    let primaryImage = { blobId: null, url: null };
 
-    for (let i = 0; i < req.files.length; i++) {
-      const file = req.files[i];
+    // Check if blob IDs were provided (frontend-uploaded images)
+    if (imagesWithAmounts && typeof imagesWithAmounts === 'string') {
       try {
-        const blob = await uploadToWalrus(file.path, file.originalname);
-        uploadedBlobs.push(blob);
-
-        if (i === 0) {
-          primaryImage.blobId = blob.blobId;
-          primaryImage.url = blob.url;
+        uploadedBlobs = JSON.parse(imagesWithAmounts);
+        if (uploadedBlobs.length > 0) {
+          primaryImage = {
+            blobId: uploadedBlobs[0].blobId,
+            url: uploadedBlobs[0].url,
+          };
         }
-
-        // Clean up local file after upload
-        fs.unlink(file.path, (err) => {
-          if (err) console.error('Failed to delete temp file:', err);
-        });
-      } catch (error) {
-        console.error(`Failed to upload ${file.originalname}:`, error);
-        // Continue with other files
+      } catch (e) {
+        console.error('Failed to parse imagesWithAmounts:', e);
       }
+    } else if (imagesWithAmounts && Array.isArray(imagesWithAmounts)) {
+      uploadedBlobs = imagesWithAmounts;
+      if (uploadedBlobs.length > 0) {
+        primaryImage = {
+          blobId: uploadedBlobs[0].blobId,
+          url: uploadedBlobs[0].url,
+        };
+      }
+    }
+    // Otherwise, upload files using multer
+    else if (req.files && req.files.length > 0) {
+      for (let i = 0; i < req.files.length; i++) {
+        const file = req.files[i];
+        try {
+          const fileBuffer = fs.readFileSync(file.path);
+          const blob = await uploadToWalrus(fileBuffer, file.originalname, {
+            mimeType: file.mimetype,
+            caretakerAddress: caretakerAddress,
+          });
+          uploadedBlobs.push(blob);
+
+          if (i === 0) {
+            primaryImage.blobId = blob.blobId;
+            primaryImage.url = blob.url;
+          }
+
+          // Clean up local file after upload
+          fs.unlink(file.path, (err) => {
+            if (err) console.error('Failed to delete temp file:', err);
+          });
+        } catch (error) {
+          console.error(`Failed to upload ${file.originalname}:`, error);
+        }
+      }
+    } else {
+      return res.status(400).json({
+        error: 'No images provided. Provide either files or blob IDs.',
+      });
     }
 
     if (uploadedBlobs.length === 0) {
       return res.status(500).json({
-        error: 'Failed to upload any images to Walrus',
+        error: 'Failed to upload or receive any images',
       });
     }
 
@@ -706,9 +674,121 @@ app.use((error, req, res, next) => {
   });
 });
 
+/**
+ * Walrus Storage Endpoints
+ */
+
+// Upload file to Walrus
+app.post('/api/walrus/upload', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file provided' });
+    }
+
+    const { title, amount, caretakerAddress, propertyId } = req.body;
+    const fileBuffer = fs.readFileSync(req.file.path);
+
+    // Upload to Walrus using SDK
+    const walrusResult = await uploadToWalrus(fileBuffer, req.file.originalname, {
+      title: title || req.file.originalname,
+      amount: amount || '0',
+      mimeType: req.file.mimetype,
+      caretakerAddress,
+      propertyId,
+    });
+
+    // Clean up temp file
+    fs.unlink(req.file.path, (err) => {
+      if (err) console.error('Failed to delete temp file:', err);
+    });
+
+    res.json({
+      success: true,
+      blobId: walrusResult.blobId,
+      url: walrusResult.url,
+      certificateId: walrusResult.certificateId,
+      tags: walrusResult.tags,
+      size: walrusResult.size,
+    });
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Retrieve file from Walrus
+app.get('/api/walrus/file/:blobId', async (req, res) => {
+  try {
+    const { blobId } = req.params;
+
+    // Get file from Walrus using SDK
+    const fileData = await getWalrusFile(blobId);
+
+    res.json({
+      success: true,
+      blobId,
+      bytes: fileData.bytes,
+      size: fileData.size,
+      tags: fileData.tags,
+    });
+  } catch (error) {
+    console.error('Retrieval error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Verify file exists on Walrus
+app.get('/api/walrus/verify/:blobId', async (req, res) => {
+  try {
+    const { blobId } = req.params;
+
+    const verification = await verifyWalrusFile(blobId);
+
+    res.json({
+      success: true,
+      ...verification,
+    });
+  } catch (error) {
+    console.error('Verification error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Bulk verify files
+app.post('/api/walrus/verify-bulk', async (req, res) => {
+  try {
+    const { blobIds } = req.body;
+
+    if (!Array.isArray(blobIds)) {
+      return res.status(400).json({ error: 'blobIds must be an array' });
+    }
+
+    const results = await Promise.all(
+      blobIds.map((id) => verifyWalrusFile(id))
+    );
+
+    res.json({
+      success: true,
+      verifications: results,
+    });
+  } catch (error) {
+    console.error('Bulk verification error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({
+    error: err.message || 'Internal server error',
+    details: process.env.NODE_ENV === 'development' ? err.stack : undefined,
+  });
 });
 
 // Start server

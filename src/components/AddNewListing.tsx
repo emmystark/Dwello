@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { uploadMultipleToWalrus, getWalrusBlobUrl } from '../walrus/client';
+import { apiRequest, API_CONFIG } from '../lib/api-config';
+import { useSui } from '../sui/SuiProviders';
 import type { Property, Apartment } from '../types';
 import '../styles/AddNewListing.css';
 import { useDwelloPayments } from '../payment';
@@ -54,6 +56,7 @@ const citiesByState: { [key: string]: string[] } = {
 };
 
 const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
+  const { account } = useSui();
   const [formData, setFormData] = useState({
     houseName: '',
     address: '',
@@ -154,6 +157,51 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
     setUploadProgress(0);
 
     try {
+      // Upload to backend which handles Walrus SDK upload
+      const uploadPromises = selectedFiles.map(async (file, index) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('title', formData.get('houseName') || `Image ${index + 1}`);
+        formData.append('caretakerAddress', account);
+
+        const response = await fetch('/api/walrus/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Upload failed');
+        }
+
+        const data = await response.json();
+        setUploadProgress(Math.round(((index + 1) / selectedFiles.length) * 100));
+        return data;
+      });
+
+      const results = await Promise.all(uploadPromises);
+      const blobIds = results.map((r) => r.blobId);
+      setUploadedBlobIds(blobIds);
+
+      alert(`Successfully uploaded ${results.length} files to Walrus!`);
+    } catch (error) {
+      console.error('Upload failed:', error);
+      alert(`Upload failed: ${error.message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleUploadToWalrusOld = async () => {
+    if (selectedFiles.length === 0) {
+      alert('Please select files to upload');
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress(0);
+
+    try {
       const results = await uploadMultipleToWalrus(
         selectedFiles,
         (progress) => setUploadProgress(progress)
@@ -240,6 +288,44 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
       };
 
       onAddProperty(newProperty);
+
+      // Send property to backend API
+      try {
+        const backendPayload = {
+          houseName: formData.houseName,
+          address: formData.address,
+          price: formData.pricing,
+          bedrooms: bedrooms.toString(),
+          bathrooms: bathrooms.toString(),
+          area: '100 sqm',
+          propertyType: 'Apartment',
+          country: formData.country,
+          state: formData.state,
+          city: formData.city,
+          description: `${bedrooms} bedroom, ${bathrooms} bathroom apartment`,
+          caretakerAddress: account,
+          imagesWithAmounts: imagesWithAmounts,
+          blobIds: uploadedBlobIds,
+        };
+
+        const apiResult = await apiRequest<any>(
+          API_CONFIG.endpoints.properties.create,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(backendPayload),
+          }
+        );
+
+        if (!apiResult?.success && !apiResult?.property) {
+          throw new Error(apiResult?.error || 'Backend save failed');
+        }
+
+        console.log('Property saved to backend:', apiResult);
+      } catch (backendError) {
+        console.error('Failed to save property to backend:', backendError);
+        // Don't fail the whole operation if backend save fails
+      }
 
       try {
         const raw = localStorage.getItem('dwelloListings');

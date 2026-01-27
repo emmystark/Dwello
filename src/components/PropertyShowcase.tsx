@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { getWalrusBlobUrl } from '../walrus/client';
 import type { Property } from '../types';
 import '../styles/PropertyShowcase.css';
 
