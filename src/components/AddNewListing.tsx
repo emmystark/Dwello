@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { uploadMultipleToWalrus, getWalrusBlobUrl } from '../walrus/client';
+import { getWalrusBlobUrl } from '../walrus/client';
 import { apiRequest, API_CONFIG } from '../lib/api-config';
 import { useSui } from '../sui/SuiProviders';
 import type { Property, Apartment } from '../types';
@@ -68,7 +68,7 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
     bedrooms: '',
     bathrooms: '',
   });
-
+  
   const [availableStates, setAvailableStates] = useState<string[]>([]);
   const [availableCities, setAvailableCities] = useState<string[]>([]);
 
@@ -81,6 +81,7 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedBlobIds, setUploadedBlobIds] = useState<string[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const { createHouseAndGetId } = useDwelloPayments();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -131,6 +132,10 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
       file.type.startsWith('image/') || file.type.startsWith('video/')
     );
 
+    if (validFiles.length !== files.length) {
+      alert(`Only images and videos are allowed. ${files.length - validFiles.length} files were skipped.`);
+    }
+
     setSelectedFiles((prev) => [...prev, ...validFiles]);
 
     // Create preview URLs
@@ -147,73 +152,138 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
     });
   };
 
+  /**
+   * FIXED: Upload to Walrus with proper error handling
+   */
   const handleUploadToWalrus = async () => {
     if (selectedFiles.length === 0) {
       alert('Please select files to upload');
       return;
     }
 
-    setUploading(true);
-    setUploadProgress(0);
-
-    try {
-      // Upload to backend which handles Walrus SDK upload
-      const uploadPromises = selectedFiles.map(async (file, index) => {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('title', formData.get('houseName') || `Image ${index + 1}`);
-        formData.append('caretakerAddress', account);
-
-        const response = await fetch('/api/walrus/upload', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Upload failed');
-        }
-
-        const data = await response.json();
-        setUploadProgress(Math.round(((index + 1) / selectedFiles.length) * 100));
-        return data;
-      });
-
-      const results = await Promise.all(uploadPromises);
-      const blobIds = results.map((r) => r.blobId);
-      setUploadedBlobIds(blobIds);
-
-      alert(`Successfully uploaded ${results.length} files to Walrus!`);
-    } catch (error) {
-      console.error('Upload failed:', error);
-      alert(`Upload failed: ${error.message}`);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleUploadToWalrusOld = async () => {
-    if (selectedFiles.length === 0) {
-      alert('Please select files to upload');
+    if (!account) {
+      alert('Please connect your wallet first');
       return;
     }
 
     setUploading(true);
     setUploadProgress(0);
+    setUploadError(null);
+
+    const successfulUploads: string[] = [];
+    const failedUploads: string[] = [];
 
     try {
-      const results = await uploadMultipleToWalrus(
-        selectedFiles,
-        (progress) => setUploadProgress(progress)
-      );
+      console.log(`🚀 Starting upload of ${selectedFiles.length} files...`);
 
-      const blobIds = results.map((r) => r.blobId);
-      setUploadedBlobIds(blobIds);
+      // Upload files one by one with proper error handling
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        
+        try {
+          console.log(`📤 Uploading file ${i + 1}/${selectedFiles.length}: ${file.name}`);
 
-      alert(`Successfully uploaded ${results.length} files to Walrus!`);
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('title', `${formData.houseName || 'Property Image'} ${i + 1}`);
+          formData.append('caretakerAddress', account);
+
+          const response = await fetch('/api/walrus/upload', {
+            method: 'POST',
+            body: formData,
+          });
+
+          console.log(`📥 Response status: ${response.status}`);
+
+          // Check if response is OK
+          if (!response.ok) {
+            const contentType = response.headers.get('content-type');
+            let errorMessage = `HTTP ${response.status}`;
+
+            if (contentType && contentType.includes('application/json')) {
+              try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorData.message || errorMessage;
+              } catch (jsonError) {
+                console.error('Failed to parse error JSON:', jsonError);
+              }
+            } else {
+              const errorText = await response.text();
+              errorMessage = errorText || errorMessage;
+            }
+
+            throw new Error(`Upload failed: ${errorMessage}`);
+          }
+
+          // Check content type before parsing JSON
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            const responseText = await response.text();
+            console.error('Non-JSON response:', responseText);
+            throw new Error(`Server returned non-JSON response: ${responseText.substring(0, 100)}`);
+          }
+
+          // Parse JSON response
+          const responseText = await response.text();
+          console.log('📝 Response text:', responseText.substring(0, 200));
+
+          if (!responseText || responseText.trim() === '') {
+            throw new Error('Empty response from server');
+          }
+
+          let data;
+          try {
+            data = JSON.parse(responseText);
+          } catch (parseError) {
+            console.error('JSON parse error:', parseError);
+            console.error('Response text:', responseText);
+            throw new Error(`Failed to parse response: ${parseError.message}`);
+          }
+
+          console.log('✅ Parsed response:', data);
+
+          // Check for success
+          if (!data.success) {
+            throw new Error(data.error || 'Upload failed (no success flag)');
+          }
+
+          // Validate blob ID
+          if (!data.blobId) {
+            throw new Error('No blob ID in response');
+          }
+
+          successfulUploads.push(data.blobId);
+          console.log(`✅ Upload ${i + 1} successful:`, data.blobId);
+
+        } catch (fileError) {
+          console.error(`❌ Failed to upload ${file.name}:`, fileError);
+          failedUploads.push(file.name);
+        }
+
+        // Update progress
+        const progress = Math.round(((i + 1) / selectedFiles.length) * 100);
+        setUploadProgress(progress);
+      }
+
+      // Update state with successful uploads
+      if (successfulUploads.length > 0) {
+        setUploadedBlobIds(successfulUploads);
+      }
+
+      // Show results
+      if (failedUploads.length === 0) {
+        alert(`✅ Successfully uploaded ${successfulUploads.length} files to Walrus!`);
+      } else {
+        const message = `⚠️ Uploaded ${successfulUploads.length} files successfully.\n${failedUploads.length} files failed:\n${failedUploads.join('\n')}`;
+        alert(message);
+        setUploadError(`${failedUploads.length} file(s) failed to upload`);
+      }
+
     } catch (error) {
-      console.error('Upload failed:', error);
-      alert('Failed to upload files to Walrus. Please try again.');
+      console.error('❌ Upload process failed:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      alert(`Upload failed: ${errorMessage}`);
+      setUploadError(errorMessage);
     } finally {
       setUploading(false);
     }
@@ -222,7 +292,7 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Upload files if not already uploaded
+    // Validate files are uploaded
     if (selectedFiles.length > 0 && uploadedBlobIds.length === 0) {
       alert('Please upload images to Walrus first');
       return;
@@ -244,7 +314,6 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
         ) || houseId;
       } catch (onChainError) {
         console.warn('On-chain house creation failed, using local ID:', onChainError);
-        // Continue with local property ID instead of failing
       }
 
       const imageUrls = uploadedBlobIds.map((blobId) => getWalrusBlobUrl(blobId));
@@ -317,16 +386,12 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
           }
         );
 
-        if (!apiResult?.success && !apiResult?.property) {
-          throw new Error(apiResult?.error || 'Backend save failed');
-        }
-
         console.log('Property saved to backend:', apiResult);
       } catch (backendError) {
         console.error('Failed to save property to backend:', backendError);
-        // Don't fail the whole operation if backend save fails
       }
 
+      // Save to localStorage
       try {
         const raw = localStorage.getItem('dwelloListings');
         const stored = raw ? JSON.parse(raw) : [];
@@ -362,31 +427,32 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
         console.warn('Failed to store public listing:', storageError);
       }
 
-      alert('Property successfully added!');
+      alert('✅ Property successfully added!');
+      
+      // Reset form
+      setFormData({
+        houseName: '',
+        address: '',
+        pricing: '',
+        numberOfApartments: 1,
+        country: '',
+        state: '',
+        city: '',
+        bedrooms: '',
+        bathrooms: '',
+      });
+      setApartments([{ number: 1, tenant: null, status: 'vacant', pricing: '' }]);
+      setSelectedFiles([]);
+      setPreviewUrls([]);
+      setUploadedBlobIds([]);
+      setUploadProgress(0);
+      setUploadError(null);
+
     } catch (error) {
       console.error('Failed to add property:', error);
       const errorMsg = error instanceof Error ? error.message : String(error);
       alert(`Failed to add property: ${errorMsg}`);
-      return;
     }
-
-    // Reset form
-    setFormData({
-      houseName: '',
-      address: '',
-      pricing: '',
-      numberOfApartments: 1,
-      country: '',
-      state: '',
-      city: '',
-      bedrooms: '',
-      bathrooms: '',
-    });
-    setApartments([{ number: 1, tenant: null, status: 'vacant', pricing: '' }]);
-    setSelectedFiles([]);
-    setPreviewUrls([]);
-    setUploadedBlobIds([]);
-    setUploadProgress(0);
   };
 
   return (
@@ -441,7 +507,7 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
                   name="pricing"
                   value={formData.pricing}
                   onChange={handleInputChange}
-                  placeholder="e.g., $25,000"
+                  placeholder="e.g., 25000"
                   required
                 />
               </div>
@@ -607,6 +673,13 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
                     ))}
                   </div>
 
+                  {uploadError && (
+                    <div className="upload-error">
+                      <span className="error-icon">⚠️</span>
+                      <span>{uploadError}</span>
+                    </div>
+                  )}
+
                   {uploadedBlobIds.length === 0 && (
                     <button
                       type="button"
@@ -629,7 +702,7 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
 
                   {uploadedBlobIds.length > 0 && (
                     <div className="upload-success">
-                      <span className="success-icon"></span>
+                      <span className="success-icon">✅</span>
                       <span>Successfully uploaded {uploadedBlobIds.length} files to Walrus</span>
                     </div>
                   )}

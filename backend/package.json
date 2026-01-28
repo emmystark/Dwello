@@ -1,39 +1,33 @@
 {
   "name": "dwello-backend",
   "version": "1.0.0",
-  "description": "Dwello backend server with Walrus SDK integration",
-  "type": "module",
+  "description": "Backend server for Dwello property management with Walrus storage",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node api.js",
-    "test": "node --test"
+    "dev": "nodemon server.js",
+    "test": "node test-api.js"
   },
   "keywords": [
-    "express",
     "walrus",
     "sui",
     "blockchain",
-    "backend"
+    "property",
+    "real-estate"
   ],
-  "author": "Dwello Team",
+  "author": "",
   "license": "MIT",
   "dependencies": {
-    "@mysten/sui": "^1.45.0",
-    "@mysten/sui.js": "^0.54.1",
-    "@mysten/walrus": "^0.8.4",
-    "cors": "^2.8.6",
-    "dotenv": "^16.6.1",
-    "express": "^4.22.1",
-    "form-data": "^4.0.5",
+    "@mysten/sui": "^1.12.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "form-data": "^4.0.1",
     "multer": "^1.4.5-lts.1",
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
-    "@types/node": "^24.10.0",
-    "nodemon": "^3.1.0"
-  },
-  "engines": {
-    "node": ">=16.0.0"
+    "nodemon": "^3.1.9"
   }
 }

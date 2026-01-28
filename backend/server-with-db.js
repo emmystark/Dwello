@@ -1,12 +1,15 @@
+// server-with-db.js
+// Production server with MongoDB integration
+
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import { SuiClient } from '@mysten/sui/client';
-import { Transaction } from '@mysten/sui/transactions';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import fetch from 'node-fetch';
 import FormData from 'form-data';
 import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import { Property, WalrusUpload, Transaction, connectDatabase } from './database-schemas.js';
 
 dotenv.config();
 
@@ -17,44 +20,39 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Multer setup for file uploads
+// Multer setup
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 10 * 1024 * 1024, // 10MB
   },
-});
-
-// Sui client setup
-const suiClient = new SuiClient({
-  url: process.env.SUI_NETWORK_URL || 'https://fullnode.testnet.sui.io:443',
+  fileFilter: (req, file, cb) => {
+    // Allow images and videos
+    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only images and videos are allowed'));
+    }
+  },
 });
 
 // Walrus configuration
 const WALRUS_PUBLISHER_URL = process.env.WALRUS_PUBLISHER_URL || 'https://publisher.walrus-testnet.walrus.space';
 const WALRUS_AGGREGATOR_URL = process.env.WALRUS_AGGREGATOR_URL || 'https://aggregator.walrus-testnet.walrus.space';
-const WALRUS_PACKAGE_ID = process.env.WALRUS_PACKAGE_ID;
-const WALRUS_SYSTEM_OBJECT = process.env.WALRUS_SYSTEM_OBJECT;
-
-// Database (in-memory for now, replace with actual DB)
-const properties = new Map();
-const walrusUploads = new Map();
 
 /**
  * Upload file to Walrus storage
  */
-async function uploadToWalrus(fileBuffer, filename, caretakerAddress) {
+async function uploadToWalrus(fileBuffer, filename, contentType) {
   try {
     console.log(`📤 Uploading ${filename} to Walrus...`);
     
-    // Create form data for Walrus
     const formData = new FormData();
     formData.append('file', fileBuffer, {
       filename: filename,
-      contentType: 'application/octet-stream',
+      contentType: contentType || 'application/octet-stream',
     });
 
-    // Upload to Walrus publisher
     const response = await fetch(`${WALRUS_PUBLISHER_URL}/v1/store`, {
       method: 'PUT',
       body: formData,
@@ -68,11 +66,6 @@ async function uploadToWalrus(fileBuffer, filename, caretakerAddress) {
 
     const result = await response.json();
     
-    // Check if we got a blob ID
-    if (!result.newlyCreated && !result.alreadyCertified) {
-      throw new Error('Walrus upload did not return blob info');
-    }
-
     const blobId = result.newlyCreated?.blobObject?.blobId || 
                    result.alreadyCertified?.blobId;
     
@@ -82,53 +75,13 @@ async function uploadToWalrus(fileBuffer, filename, caretakerAddress) {
 
     console.log(`✅ Successfully uploaded to Walrus: ${blobId}`);
 
-    // Store upload metadata
-    const uploadData = {
+    return {
       blobId,
-      filename,
-      uploadedAt: new Date().toISOString(),
-      caretakerAddress,
       url: `${WALRUS_AGGREGATOR_URL}/v1/${blobId}`,
-      size: fileBuffer.length,
     };
-
-    walrusUploads.set(blobId, uploadData);
-
-    return uploadData;
   } catch (error) {
     console.error('❌ Walrus upload error:', error);
     throw error;
-  }
-}
-
-/**
- * Register blob on Sui blockchain (optional)
- */
-async function registerBlobOnChain(blobId, caretakerAddress, metadata) {
-  try {
-    if (!WALRUS_PACKAGE_ID || !WALRUS_SYSTEM_OBJECT) {
-      console.warn('⚠️ Walrus package ID or system object not configured, skipping on-chain registration');
-      return null;
-    }
-
-    // Create transaction to register blob
-    const tx = new Transaction();
-    
-    tx.moveCall({
-      target: `${WALRUS_PACKAGE_ID}::blob::register`,
-      arguments: [
-        tx.object(WALRUS_SYSTEM_OBJECT),
-        tx.pure.string(blobId),
-        tx.pure.string(JSON.stringify(metadata)),
-      ],
-    });
-
-    // For now, return null as we need the user's wallet to sign
-    // In production, this would be handled client-side
-    return null;
-  } catch (error) {
-    console.error('❌ On-chain registration error:', error);
-    return null;
   }
 }
 
@@ -136,12 +89,9 @@ async function registerBlobOnChain(blobId, caretakerAddress, metadata) {
 
 /**
  * POST /api/walrus/upload
- * Upload a file to Walrus storage
  */
 app.post('/api/walrus/upload', upload.single('file'), async (req, res) => {
   try {
-    console.log('📨 Received upload request');
-    
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -158,23 +108,37 @@ app.post('/api/walrus/upload', upload.single('file'), async (req, res) => {
       });
     }
 
-    console.log(`📄 File: ${req.file.originalname}, Size: ${req.file.size} bytes`);
+    console.log(`📄 Uploading: ${req.file.originalname} (${req.file.size} bytes)`);
 
     // Upload to Walrus
-    const uploadResult = await uploadToWalrus(
+    const { blobId, url } = await uploadToWalrus(
       req.file.buffer,
       req.file.originalname,
-      caretakerAddress
+      req.file.mimetype
     );
 
-    // Return success response
+    // Save to database
+    const uploadRecord = new WalrusUpload({
+      blobId,
+      filename: req.file.originalname,
+      caretakerAddress,
+      url,
+      size: req.file.size,
+      contentType: req.file.mimetype,
+      metadata: {
+        title: title || req.file.originalname,
+      },
+    });
+
+    await uploadRecord.save();
+
     res.json({
       success: true,
-      blobId: uploadResult.blobId,
-      url: uploadResult.url,
-      filename: uploadResult.filename,
-      uploadedAt: uploadResult.uploadedAt,
-      size: uploadResult.size,
+      blobId,
+      url,
+      filename: req.file.originalname,
+      uploadedAt: uploadRecord.createdAt,
+      size: req.file.size,
     });
 
   } catch (error) {
@@ -188,14 +152,13 @@ app.post('/api/walrus/upload', upload.single('file'), async (req, res) => {
 
 /**
  * GET /api/walrus/blob/:blobId
- * Get blob metadata
  */
-app.get('/api/walrus/blob/:blobId', (req, res) => {
+app.get('/api/walrus/blob/:blobId', async (req, res) => {
   try {
     const { blobId } = req.params;
-    const blobData = walrusUploads.get(blobId);
+    const blob = await WalrusUpload.findOne({ blobId });
 
-    if (!blobData) {
+    if (!blob) {
       return res.status(404).json({
         success: false,
         error: 'Blob not found',
@@ -204,10 +167,9 @@ app.get('/api/walrus/blob/:blobId', (req, res) => {
 
     res.json({
       success: true,
-      blob: blobData,
+      blob,
     });
   } catch (error) {
-    console.error('❌ Error fetching blob:', error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -217,12 +179,9 @@ app.get('/api/walrus/blob/:blobId', (req, res) => {
 
 /**
  * POST /api/properties/create
- * Create a new property listing
  */
 app.post('/api/properties/create', async (req, res) => {
   try {
-    console.log('📨 Creating property...');
-    
     const {
       houseName,
       address,
@@ -238,21 +197,19 @@ app.post('/api/properties/create', async (req, res) => {
       caretakerAddress,
       imagesWithAmounts,
       blobIds,
+      apartments,
     } = req.body;
 
     // Validate required fields
     if (!houseName || !address || !price || !caretakerAddress) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields',
+        error: 'Missing required fields: houseName, address, price, caretakerAddress',
       });
     }
 
-    // Create property object
-    const propertyId = `prop_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const property = {
-      id: propertyId,
+    // Create property
+    const property = new Property({
       houseName,
       address,
       price,
@@ -267,14 +224,12 @@ app.post('/api/properties/create', async (req, res) => {
       caretakerAddress,
       images: imagesWithAmounts || [],
       blobIds: blobIds || [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      apartments: apartments || [],
+    });
 
-    // Store property
-    properties.set(propertyId, property);
+    await property.save();
 
-    console.log(`✅ Property created: ${propertyId}`);
+    console.log(`✅ Property created: ${property._id}`);
 
     res.json({
       success: true,
@@ -292,28 +247,28 @@ app.post('/api/properties/create', async (req, res) => {
 
 /**
  * GET /api/properties
- * Get all properties
  */
-app.get('/api/properties', (req, res) => {
+app.get('/api/properties', async (req, res) => {
   try {
-    const { caretakerAddress } = req.query;
+    const { caretakerAddress, country, state, city, propertyType } = req.query;
     
-    let propertyList = Array.from(properties.values());
-    
-    // Filter by caretaker if provided
-    if (caretakerAddress) {
-      propertyList = propertyList.filter(
-        p => p.caretakerAddress === caretakerAddress
-      );
-    }
+    const filter = {};
+    if (caretakerAddress) filter.caretakerAddress = caretakerAddress;
+    if (country) filter.country = country;
+    if (state) filter.state = state;
+    if (city) filter.city = city;
+    if (propertyType) filter.propertyType = propertyType;
+
+    const properties = await Property.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(100);
 
     res.json({
       success: true,
-      properties: propertyList,
-      count: propertyList.length,
+      properties,
+      count: properties.length,
     });
   } catch (error) {
-    console.error('❌ Error fetching properties:', error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -323,12 +278,10 @@ app.get('/api/properties', (req, res) => {
 
 /**
  * GET /api/properties/:id
- * Get a specific property
  */
-app.get('/api/properties/:id', (req, res) => {
+app.get('/api/properties/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const property = properties.get(id);
+    const property = await Property.findById(req.params.id);
 
     if (!property) {
       return res.status(404).json({
@@ -342,7 +295,6 @@ app.get('/api/properties/:id', (req, res) => {
       property,
     });
   } catch (error) {
-    console.error('❌ Error fetching property:', error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -352,12 +304,14 @@ app.get('/api/properties/:id', (req, res) => {
 
 /**
  * PUT /api/properties/:id
- * Update a property
  */
 app.put('/api/properties/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const property = properties.get(id);
+    const property = await Property.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body },
+      { new: true, runValidators: true }
+    );
 
     if (!property) {
       return res.status(404).json({
@@ -366,22 +320,11 @@ app.put('/api/properties/:id', async (req, res) => {
       });
     }
 
-    // Update property
-    const updatedProperty = {
-      ...property,
-      ...req.body,
-      id, // Ensure ID doesn't change
-      updatedAt: new Date().toISOString(),
-    };
-
-    properties.set(id, updatedProperty);
-
     res.json({
       success: true,
-      property: updatedProperty,
+      property,
     });
   } catch (error) {
-    console.error('❌ Error updating property:', error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -391,27 +334,98 @@ app.put('/api/properties/:id', async (req, res) => {
 
 /**
  * DELETE /api/properties/:id
- * Delete a property
  */
-app.delete('/api/properties/:id', (req, res) => {
+app.delete('/api/properties/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    
-    if (!properties.has(id)) {
+    const property = await Property.findByIdAndDelete(req.params.id);
+
+    if (!property) {
       return res.status(404).json({
         success: false,
         error: 'Property not found',
       });
     }
 
-    properties.delete(id);
-
     res.json({
       success: true,
       message: 'Property deleted successfully',
     });
   } catch (error) {
-    console.error('❌ Error deleting property:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/transactions/create
+ */
+app.post('/api/transactions/create', async (req, res) => {
+  try {
+    const {
+      propertyId,
+      apartmentNumber,
+      amount,
+      currency,
+      fromAddress,
+      toAddress,
+      txHash,
+      type,
+      description,
+    } = req.body;
+
+    const transaction = new Transaction({
+      propertyId,
+      apartmentNumber,
+      amount,
+      currency: currency || 'USD',
+      fromAddress,
+      toAddress,
+      txHash,
+      type,
+      description,
+      status: 'pending',
+    });
+
+    await transaction.save();
+
+    res.json({
+      success: true,
+      transaction,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/transactions
+ */
+app.get('/api/transactions', async (req, res) => {
+  try {
+    const { propertyId, fromAddress, toAddress, status } = req.query;
+    
+    const filter = {};
+    if (propertyId) filter.propertyId = propertyId;
+    if (fromAddress) filter.fromAddress = fromAddress;
+    if (toAddress) filter.toAddress = toAddress;
+    if (status) filter.status = status;
+
+    const transactions = await Transaction.find(filter)
+      .sort({ createdAt: -1 })
+      .populate('propertyId')
+      .limit(100);
+
+    res.json({
+      success: true,
+      transactions,
+      count: transactions.length,
+    });
+  } catch (error) {
     res.status(500).json({
       success: false,
       error: error.message,
@@ -421,13 +435,13 @@ app.delete('/api/properties/:id', (req, res) => {
 
 /**
  * GET /api/health
- * Health check endpoint
  */
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
     status: 'healthy',
     timestamp: new Date().toISOString(),
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
     walrus: {
       publisher: WALRUS_PUBLISHER_URL,
       aggregator: WALRUS_AGGREGATOR_URL,
@@ -435,7 +449,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Error handling middleware
+// Error handling
 app.use((err, req, res, next) => {
   console.error('❌ Server error:', err);
   res.status(500).json({
@@ -445,11 +459,27 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`\n🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📡 Walrus Publisher: ${WALRUS_PUBLISHER_URL}`);
-  console.log(`📡 Walrus Aggregator: ${WALRUS_AGGREGATOR_URL}`);
-  console.log(`\n✅ Ready to accept requests!\n`);
-});
+async function startServer() {
+  try {
+    // Connect to database if configured
+    if (process.env.DATABASE_URL) {
+      await connectDatabase(process.env.DATABASE_URL);
+    } else {
+      console.warn('⚠️  No DATABASE_URL configured, running without database');
+    }
+
+    app.listen(PORT, () => {
+      console.log(`\n🚀 Server running on http://localhost:${PORT}`);
+      console.log(`📡 Walrus Publisher: ${WALRUS_PUBLISHER_URL}`);
+      console.log(`📡 Walrus Aggregator: ${WALRUS_AGGREGATOR_URL}`);
+      console.log(`\n✅ Ready to accept requests!\n`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 export default app;
