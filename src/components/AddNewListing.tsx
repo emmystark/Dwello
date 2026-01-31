@@ -152,143 +152,73 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
     });
   };
 
-  /**
-   * FIXED: Upload to Walrus with proper error handling
-   */
-  const handleUploadToWalrus = async () => {
-    if (selectedFiles.length === 0) {
-      alert('Please select files to upload');
-      return;
-    }
-
-    if (!account) {
-      alert('Please connect your wallet first');
-      return;
-    }
-
-    setUploading(true);
-    setUploadProgress(0);
-    setUploadError(null);
-
-    const successfulUploads: string[] = [];
-    const failedUploads: string[] = [];
-
-    try {
-      console.log(`🚀 Starting upload of ${selectedFiles.length} files...`);
-
-      // Upload files one by one with proper error handling
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i];
-        
-        try {
-          console.log(`📤 Uploading file ${i + 1}/${selectedFiles.length}: ${file.name}`);
-
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('title', `${formData.houseName || 'Property Image'} ${i + 1}`);
-          formData.append('caretakerAddress', account);
-
-          const response = await fetch('/api/walrus/upload', {
-            method: 'POST',
-            body: formData,
-          });
-
-          console.log(`📥 Response status: ${response.status}`);
-
-          // Check if response is OK
-          if (!response.ok) {
-            const contentType = response.headers.get('content-type');
-            let errorMessage = `HTTP ${response.status}`;
-
-            if (contentType && contentType.includes('application/json')) {
-              try {
-                const errorData = await response.json();
-                errorMessage = errorData.error || errorData.message || errorMessage;
-              } catch (jsonError) {
-                console.error('Failed to parse error JSON:', jsonError);
-              }
-            } else {
-              const errorText = await response.text();
-              errorMessage = errorText || errorMessage;
-            }
-
-            throw new Error(`Upload failed: ${errorMessage}`);
-          }
-
-          // Check content type before parsing JSON
-          const contentType = response.headers.get('content-type');
-          if (!contentType || !contentType.includes('application/json')) {
-            const responseText = await response.text();
-            console.error('Non-JSON response:', responseText);
-            throw new Error(`Server returned non-JSON response: ${responseText.substring(0, 100)}`);
-          }
-
-          // Parse JSON response
-          const responseText = await response.text();
-          console.log('📝 Response text:', responseText.substring(0, 200));
-
-          if (!responseText || responseText.trim() === '') {
-            throw new Error('Empty response from server');
-          }
-
-          let data;
-          try {
-            data = JSON.parse(responseText);
-          } catch (parseError) {
-            console.error('JSON parse error:', parseError);
-            console.error('Response text:', responseText);
-            throw new Error(`Failed to parse response: ${parseError.message}`);
-          }
-
-          console.log('✅ Parsed response:', data);
-
-          // Check for success
-          if (!data.success) {
-            throw new Error(data.error || 'Upload failed (no success flag)');
-          }
-
-          // Validate blob ID
-          if (!data.blobId) {
-            throw new Error('No blob ID in response');
-          }
-
-          successfulUploads.push(data.blobId);
-          console.log(`✅ Upload ${i + 1} successful:`, data.blobId);
-
-        } catch (fileError) {
-          console.error(`❌ Failed to upload ${file.name}:`, fileError);
-          failedUploads.push(file.name);
+/**
+ * Upload to Walrus with proper error handling and progress
+ */
+const handleUploadToWalrus = async () => {
+  if (selectedFiles.length === 0) {
+    alert('Please select files to upload');
+    return;
+  }
+  if (!account) {
+    alert('Please connect your wallet first');
+    return;
+  }
+  setUploading(true);
+  setUploadProgress(0);
+  setUploadError(null);
+  const successfulUploads: string[] = [];
+  const failedUploads: string[] = [];
+  try {
+    console.log(`🚀 Starting upload of ${selectedFiles.length} files...`);
+    // Upload files sequentially with progress
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i];
+      try {
+        console.log(`📤 Uploading file ${i + 1}/${selectedFiles.length}: ${file.name}`);
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('title', `${formData.houseName || 'Property Media'} ${i + 1}`);
+        formData.append('caretakerAddress', account);
+        const response = await fetch('/api/walrus/upload', {  // Use full URL if ports differ: http://localhost:3001/api/walrus/upload
+          method: 'POST',
+          body: formData,
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Upload failed: ${errorText || response.statusText}`);
         }
-
-        // Update progress
-        const progress = Math.round(((i + 1) / selectedFiles.length) * 100);
-        setUploadProgress(progress);
+        const data = await response.json();
+        if (!data.success || !data.blobId) {
+          throw new Error(data.error || 'Invalid response format');
+        }
+        successfulUploads.push(data.blobId);
+        console.log(`✅ Upload ${i + 1} successful: ${data.blobId}`);
+      } catch (fileError) {
+        console.error(`❌ Failed to upload ${file.name}:`, fileError);
+        failedUploads.push(file.name);
       }
-
-      // Update state with successful uploads
-      if (successfulUploads.length > 0) {
-        setUploadedBlobIds(successfulUploads);
-      }
-
-      // Show results
-      if (failedUploads.length === 0) {
-        alert(`✅ Successfully uploaded ${successfulUploads.length} files to Walrus!`);
-      } else {
-        const message = `⚠️ Uploaded ${successfulUploads.length} files successfully.\n${failedUploads.length} files failed:\n${failedUploads.join('\n')}`;
-        alert(message);
-        setUploadError(`${failedUploads.length} file(s) failed to upload`);
-      }
-
-    } catch (error) {
-      console.error('❌ Upload process failed:', error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      alert(`Upload failed: ${errorMessage}`);
-      setUploadError(errorMessage);
-    } finally {
-      setUploading(false);
+      // Update progress
+      setUploadProgress(Math.round(((i + 1) / selectedFiles.length) * 100));
     }
-  };
-
+    if (successfulUploads.length > 0) {
+      setUploadedBlobIds(successfulUploads);
+    }
+    if (failedUploads.length > 0) {
+      const message = `${failedUploads.length} files failed: ${failedUploads.join(', ')}`;
+      setUploadError(message);
+      alert(`⚠️ Partial success: ${successfulUploads.length} uploaded. ${message}`);
+    } else {
+      alert(`✅ All ${successfulUploads.length} files uploaded to Walrus!`);
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    setUploadError(errorMessage);
+    alert(`Upload failed: ${errorMessage}`);
+  } finally {
+    setUploading(false);
+  }
+};
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 

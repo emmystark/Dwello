@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { getWalrusBlobUrl } from "../walrus/client";
-import bedroomBlobIds from "../walrus/bloblds";
+import { getWalrusImageUrl, isValidBlobId } from "../lib/walrus-utils";
 import type { Property } from "../types";
 import "../styles/PropertyDetails.css";
 import { useDwelloPayments } from "../payment";
@@ -31,6 +30,7 @@ const PropertyDetails = ({
   const [accessExpiresAt, setAccessExpiresAt] = useState<number | null>(null);
   const [isPaying, setIsPaying] = useState(false);
 
+  // Access management
   useEffect(() => {
     if (!property || !account) {
       setHasAccess(false);
@@ -72,6 +72,7 @@ const PropertyDetails = ({
     }
   }, [property, account]);
 
+  // Access expiration timer
   useEffect(() => {
     if (!accessExpiresAt) return;
 
@@ -136,69 +137,126 @@ const PropertyDetails = ({
     }
   };
 
-  // Load images from Walrus on component mount
+  // FIXED: Load images from Walrus with retry logic
   useEffect(() => {
-    const loadImages = async () => {
-      if (!property) return;
+    const loadMediaWithRetry = async (
+      blobId: string,
+      retries = 3
+    ): Promise<string | null> => {
+      try {
+        // Generate Walrus URL from blob ID
+        const url = getWalrusImageUrl(blobId);
+        if (!url) {
+          console.error(`Invalid blob ID: ${blobId}`);
+          return null;
+        }
 
+        // Check if blob is accessible
+        const res = await fetch(url, { method: "HEAD" });
+        if (res.ok) {
+          console.log(`✅ Blob accessible: ${blobId}`);
+          return url;
+        }
+        throw new Error("Not ready");
+      } catch (error) {
+        if (retries > 0) {
+          console.log(`⏳ Retrying blob ${blobId} (${retries} attempts left)...`);
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          return loadMediaWithRetry(blobId, retries - 1);
+        }
+        console.error(`❌ Failed to load blob after retries: ${blobId}`);
+        return null;
+      }
+    };
+
+    const loadMedia = async () => {
+      if (!property) return;
       setLoadingImages(true);
-      const images: string[] = [];
+      const mediaUrls: string[] = [];
       const amounts: (number | undefined)[] = [];
 
       try {
-        // First, try to load from property's blob IDs
+        console.log("Loading property images...");
+        console.log("Property data:", {
+          blobIds: property.blobIds,
+          walrusId: property.walrusId,
+          imageUrl: property.imageUrl,
+          images: property.images,
+        });
+
+        // Priority 1: Use blobIds array (best option)
         if (property.blobIds && property.blobIds.length > 0) {
+          console.log(`Loading ${property.blobIds.length} blob IDs...`);
           for (const blobId of property.blobIds) {
-            try {
-              const url = getWalrusBlobUrl(blobId);
-              images.push(url);
-              amounts.push(undefined);
-            } catch (error) {
-              console.error("Failed to load blob:", blobId, error);
+            if (isValidBlobId(blobId)) {
+              const url = await loadMediaWithRetry(blobId);
+              if (url) {
+                mediaUrls.push(url);
+                amounts.push(undefined);
+              }
+            } else {
+              console.warn(`Invalid blob ID: ${blobId}`);
             }
           }
         }
-        // Then try existing image URLs with amounts
+        // Priority 2: Use single walrusId
+        else if (property.walrusId && isValidBlobId(property.walrusId)) {
+          console.log(`Loading single Walrus ID: ${property.walrusId}`);
+          const url = await loadMediaWithRetry(property.walrusId);
+          if (url) {
+            mediaUrls.push(url);
+            amounts.push(undefined);
+          }
+        }
+        // Priority 3: Use images array with amounts
         else if (property.images && property.images.length > 0) {
+          console.log(`Loading ${property.images.length} images from array...`);
           for (const img of property.images) {
-            // Handle both ImageWithAmount interface and plain URLs
-            if (typeof img === 'string') {
-              images.push(img);
-              amounts.push(undefined);
-            } else if (typeof img === 'object' && 'url' in img) {
-              images.push(img.url);
+            if (typeof img === "string") {
+              // If it's a blob ID, convert to URL
+              if (isValidBlobId(img)) {
+                const url = await loadMediaWithRetry(img);
+                if (url) {
+                  mediaUrls.push(url);
+                  amounts.push(undefined);
+                }
+              } else {
+                mediaUrls.push(img);
+                amounts.push(undefined);
+              }
+            } else if (typeof img === "object" && "url" in img) {
+              mediaUrls.push(img.url);
               amounts.push(img.amount);
             }
           }
         }
-        // Try imageUrl property
+        // Priority 4: Use single imageUrl
         else if (property.imageUrl) {
-          images.push(property.imageUrl);
-          amounts.push(undefined);
-        }
-        // Finally, try to load from bedroom blob IDs based on bedrooms count
-        else if (property.bedrooms && bedroomBlobIds[property.bedrooms]) {
-          const availableBlobIds = bedroomBlobIds[property.bedrooms] || [];
-          if (availableBlobIds.length > 0) {
-            const firstEntry = availableBlobIds[0];
-            const blobId = firstEntry.includes(": ")
-              ? firstEntry.split(": ")[1]
-              : firstEntry;
-            const url = getWalrusBlobUrl(blobId);
-            images.push(url);
+          console.log(`Loading single image URL: ${property.imageUrl}`);
+          // Check if imageUrl is a blob ID or already a full URL
+          if (isValidBlobId(property.imageUrl)) {
+            const url = await loadMediaWithRetry(property.imageUrl);
+            if (url) {
+              mediaUrls.push(url);
+              amounts.push(undefined);
+            }
+          } else {
+            mediaUrls.push(property.imageUrl);
             amounts.push(undefined);
           }
         }
+
+        console.log(`✅ Loaded ${mediaUrls.length} images successfully`);
       } catch (error) {
-        console.error("Error loading images:", error);
+        console.error("Error loading media:", error);
       } finally {
-        setPropertyImages(images);
+        setPropertyImages(mediaUrls);
         setImageAmounts(amounts);
         setLoadingImages(false);
       }
     };
 
-    loadImages();
+    loadMedia();
   }, [property]);
 
   const handleBack = () => {
@@ -231,6 +289,16 @@ const PropertyDetails = ({
   const bathrooms = property.bathrooms || 1;
   const area = property.area || "100 sqm";
 
+  // Detect if media is video
+  const isVideo = (url: string) => {
+    return (
+      url.endsWith(".mp4") ||
+      url.endsWith(".webm") ||
+      url.endsWith(".ogg") ||
+      url.includes("/video/")
+    );
+  };
+
   return (
     <div className="property-details-page">
       <div className="details-header">
@@ -251,44 +319,68 @@ const PropertyDetails = ({
       </div>
 
       <div className="details-layout">
-        {/* Left Side - Property Info */}
         <div className="property-main-section">
-          {/* Hero Section */}
           <div className="property-hero-card">
             <div className="hero-image-section">
               <div className="main-property-image">
                 {loadingImages ? (
                   <div className="placeholder-hero">
                     <div className="loading-spinner"></div>
-                    <p>Loading images...</p>
+                    <p>Loading media from Walrus...</p>
                   </div>
                 ) : propertyImages.length > 0 ? (
                   <div className="image-container">
-                    <img
-                      src={propertyImages[selectedImageIndex]}
-                      alt={property.houseName || property.title}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
-                        const parent = (e.target as HTMLImageElement)
-                          .parentElement;
-                        if (parent) {
-                          parent.innerHTML =
-                            '<div class="placeholder-hero"><span class="hero-icon">🏠</span></div>';
-                        }
-                      }}
-                    />
-                    {imageAmounts[selectedImageIndex] && imageAmounts[selectedImageIndex]! > 0 && (
-                      <div className="image-amount-badge">
-                        💰 ${(imageAmounts[selectedImageIndex]! / 1000000).toFixed(2)} USDC
-                      </div>
+                    {isVideo(propertyImages[selectedImageIndex]) ? (
+                      <video
+                        src={propertyImages[selectedImageIndex]}
+                        controls
+                        autoPlay
+                        muted
+                        loop
+                        onError={(e) => {
+                          (e.target as HTMLVideoElement).style.display = "none";
+                          const parent = (e.target as HTMLVideoElement)
+                            .parentElement;
+                          if (parent) {
+                            parent.innerHTML =
+                              '<div class="placeholder-hero"><span class="hero-icon">🏠</span></div>';
+                          }
+                        }}
+                      />
+                    ) : (
+                      <img
+                        src={propertyImages[selectedImageIndex]}
+                        alt={property.houseName || property.title}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                          const parent = (e.target as HTMLImageElement)
+                            .parentElement;
+                          if (parent) {
+                            parent.innerHTML =
+                              '<div class="placeholder-hero"><span class="hero-icon">🏠</span></div>';
+                          }
+                        }}
+                      />
                     )}
+                    {imageAmounts[selectedImageIndex] &&
+                      imageAmounts[selectedImageIndex]! > 0 && (
+                        <div className="image-amount-badge">
+                          💰 $
+                          {(imageAmounts[selectedImageIndex]! / 1000000).toFixed(
+                            2
+                          )}{" "}
+                          USDC
+                        </div>
+                      )}
                   </div>
                 ) : (
                   <div className="placeholder-hero">
                     <span className="hero-icon">🏠</span>
                   </div>
                 )}
-                <div className="image-badge">Verified</div>
+                <div className="image-badge">
+                  {isValidBlobId(property.walrusId) ? "✓ Verified" : "Listed"}
+                </div>
               </div>
 
               {propertyImages.length > 1 && (
@@ -301,13 +393,23 @@ const PropertyDetails = ({
                       }`}
                       onClick={() => setSelectedImageIndex(idx)}
                     >
-                      <img
-                        src={img}
-                        alt={`View ${idx + 1}`}
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = "none";
-                        }}
-                      />
+                      {isVideo(img) ? (
+                        <video
+                          src={img}
+                          muted
+                          onError={(e) => {
+                            (e.target as HTMLVideoElement).style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <img
+                          src={img}
+                          alt={`View ${idx + 1}`}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                      )}
                       {imageAmounts[idx] && imageAmounts[idx]! > 0 && (
                         <div className="thumbnail-amount-badge">
                           ${(imageAmounts[idx]! / 1000000).toFixed(2)}
@@ -324,15 +426,16 @@ const PropertyDetails = ({
                 {property.houseName || property.title}
               </h1>
               <p className="property-location">
-                {" "}
-                {property.address || property.location}
+                📍 {property.address || property.location}
               </p>
 
               <div className="property-badges">
                 <span className="badge">
                   {bedrooms} Bedroom{bedrooms > 1 ? "s" : ""}
                 </span>
-                <span className="badge verified">Verified</span>
+                {isValidBlobId(property.walrusId) && (
+                  <span className="badge verified">✓ Verified</span>
+                )}
                 <span className="badge secure">Secure</span>
                 <span className="badge available">Available</span>
               </div>
@@ -341,10 +444,12 @@ const PropertyDetails = ({
                 <div className="price-main">
                   <span className="price-label">Price</span>
                   <span className="price-amount">
-                    {property.currency || ""}
+                    {property.currency || "$"}
                     {property.price || property.pricing}
                   </span>
-                  <span className="price-period">per year</span>
+                  <span className="price-period">
+                    {property.period || "per year"}
+                  </span>
                 </div>
                 {hasAccess ? (
                   <div className="access-active-badge">
@@ -381,16 +486,21 @@ const PropertyDetails = ({
                 </div>
               </div>
 
-              <div className="blockchain-verification">
-                <div className="verification-details">
-                  <span className="verification-label">
-                    Blockchain Verified
-                  </span>
-                  <code className="verification-id">
-                    {property.id || property.walrusId}
-                  </code>
+              {isValidBlobId(property.walrusId) && (
+                <div className="blockchain-verification">
+                  <div className="verification-details">
+                    <span className="verification-label">
+                      🔗 Walrus Blockchain Verified
+                    </span>
+                    <code
+                      className="verification-id"
+                      title={property.walrusId}
+                    >
+                      {property.walrusId?.substring(0, 24)}...
+                    </code>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -421,10 +531,9 @@ const PropertyDetails = ({
                       </div>
                       <span className={`status-pill ${apartment.status}`}>
                         {apartment.status === "occupied"
-                        ? "Occupied"
-                          : "Available"
-                        }
-                      // </span>
+                          ? "Occupied"
+                          : "Available"}
+                      </span>
                     </div>
 
                     {apartment.status === "occupied" ? (

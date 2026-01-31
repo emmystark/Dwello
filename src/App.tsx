@@ -4,6 +4,11 @@ import LocationSelector from './components/LocationSelector'
 import PropertyList from './components/PropertyList'
 import PropertyDetails from './components/PropertyDetails'
 import CaretakerDashboard from './components/Caretaker/CaretakerDashboard'
+
+import AllProperties from './components/AllProperties';
+
+
+
 import WalletBalance from './components/WalletBalance'
 import { useSui } from './sui/SuiProviders'
 import './styles/App.css'
@@ -145,6 +150,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<AppContent />} />
+        <Route path="/AllProperties" element={<AllProperties />} />
         <Route path="/propertydetails" element={<PropertyDetails />} />
         {/* Add other routes as needed */}
       </Routes>

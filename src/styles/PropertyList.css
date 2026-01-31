@@ -1,0 +1,495 @@
+/* PropertyList.css - Walrus Image Display Styling */
+
+/* ========================================
+   Main Container
+   ======================================== */
+.property-list {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* ========================================
+   Header Section
+   ======================================== */
+.list-header {
+  text-align: center;
+  margin-bottom: 40px;
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
+}
+
+.list-header h2 {
+  margin: 0 0 10px 0;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.location-display {
+  font-size: 18px;
+  margin: 10px 0;
+  opacity: 0.95;
+}
+
+.results-count {
+  font-size: 14px;
+  margin: 10px 0 0 0;
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+/* ========================================
+   Property Grid
+   ======================================== */
+.properties-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 30px;
+  margin-top: 30px;
+}
+
+/* ========================================
+   Property Card
+   ======================================== */
+.property-card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.property-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 12px 24px rgba(102, 126, 234, 0.15);
+}
+
+/* ========================================
+   Property Image Section
+   ======================================== */
+.property-image {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.placeholder-image {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Walrus Image Styling */
+.walrus-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.5s ease-in-out;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.walrus-image.loaded {
+  opacity: 1;
+}
+
+/* Fallback Icon */
+.image-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 64px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+/* Property Type Badge */
+.property-type {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 2;
+}
+
+/* Verification Badge */
+.property-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(40, 167, 69, 0.95);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ========================================
+   Property Details Section
+   ======================================== */
+.property-details {
+  padding: 20px;
+}
+
+.property-details h3 {
+  margin: 0 0 12px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #2c3e50;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.location {
+  color: #7f8c8d;
+  font-size: 14px;
+  margin: 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Price Styling */
+.price {
+  font-size: 24px;
+  font-weight: 700;
+  color: #667eea;
+  margin: 12px 0;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.price strong {
+  font-size: 28px;
+}
+
+.period {
+  font-size: 14px;
+  font-weight: 400;
+  color: #7f8c8d;
+}
+
+/* ========================================
+   Property Features
+   ======================================== */
+.property-features {
+  display: flex;
+  gap: 15px;
+  margin: 15px 0;
+  padding: 12px 0;
+  border-top: 1px solid #ecf0f1;
+  border-bottom: 1px solid #ecf0f1;
+  flex-wrap: wrap;
+}
+
+.property-features span {
+  color: #7f8c8d;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ========================================
+   Blockchain Info Section
+   ======================================== */
+.blockchain-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 15px 0;
+  padding: 10px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+  border-radius: 8px;
+  border: 1px solid rgba(102, 126, 234, 0.1);
+}
+
+/* Walrus Badge */
+.walrus-badge {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+}
+
+/* Blob ID Display */
+.blob-id {
+  color: #6c757d;
+  font-family: 'Courier New', Monaco, monospace;
+  font-size: 11px;
+  cursor: help;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 3px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.blob-id:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* ========================================
+   View Details Button
+   ======================================== */
+.view-btn {
+  width: 100%;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.view-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.view-btn:active {
+  transform: translateY(0);
+}
+
+/* ========================================
+   Loading State
+   ======================================== */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+  text-align: center;
+}
+
+.spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 24px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading p {
+  color: #7f8c8d;
+  font-size: 16px;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* ========================================
+   Empty State
+   ======================================== */
+.no-properties {
+  padding: 80px 20px;
+  text-align: center;
+}
+
+.empty-state {
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 40px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.empty-icon {
+  font-size: 80px;
+  display: block;
+  margin-bottom: 24px;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.empty-state h3 {
+  color: #2c3e50;
+  font-size: 24px;
+  margin: 0 0 12px 0;
+}
+
+.empty-state p {
+  color: #7f8c8d;
+  font-size: 16px;
+  margin: 8px 0;
+}
+
+.hint {
+  color: #95a5a6;
+  font-size: 14px;
+  margin-top: 16px;
+  font-style: italic;
+}
+
+/* ========================================
+   Responsive Design
+   ======================================== */
+@media (max-width: 768px) {
+  .properties-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .list-header h2 {
+    font-size: 24px;
+  }
+
+  .location-display {
+    font-size: 16px;
+  }
+
+  .property-card {
+    margin: 0 10px;
+  }
+
+  .property-image {
+    height: 200px;
+  }
+
+  .price {
+    font-size: 20px;
+  }
+
+  .price strong {
+    font-size: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .property-list {
+    padding: 10px;
+  }
+
+  .list-header {
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+
+  .property-features {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .blockchain-info {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* ========================================
+   Accessibility
+   ======================================== */
+.property-card:focus {
+  outline: 3px solid #667eea;
+  outline-offset: 2px;
+}
+
+.view-btn:focus {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .property-card {
+    border: 2px solid #000;
+  }
+
+  .property-badge {
+    border: 2px solid #fff;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .property-card,
+  .walrus-image,
+  .view-btn,
+  .spinner {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Dark mode support (optional) */
+@media (prefers-color-scheme: dark) {
+  .property-card {
+    background: #1a1a1a;
+    color: #e0e0e0;
+  }
+
+  .property-details h3 {
+    color: #ffffff;
+  }
+
+  .location {
+    color: #b0b0b0;
+  }
+
+  .property-features span {
+    color: #b0b0b0;
+  }
+
+  .blockchain-info {
+    background: rgba(102, 126, 234, 0.1);
+    border-color: rgba(102, 126, 234, 0.2);
+  }
+}
