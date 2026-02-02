@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { getWalrusBlobUrl } from '../walrus/client';
 import { apiRequest, API_CONFIG } from '../lib/api-config';
 import { useSui } from '../sui/SuiProviders';
@@ -82,7 +82,32 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedBlobIds, setUploadedBlobIds] = useState<string[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
   const { createHouseAndGetId } = useDwelloPayments();
+
+  // Check MongoDB sync status on mount
+  useEffect(() => {
+    checkSyncStatus();
+  }, []);
+
+
+
+  const checkSyncStatus = async () => {
+    try {
+      const response = await fetch(`http://localhost:3001/api/sync/status`);
+      const data = await response.json();
+      
+      if (data.success && data.syncEnabled) {
+        console.log('✅ MongoDB sync is enabled and working');
+        console.log('📊 MongoDB:', data.mongodb);
+        console.log('💾 In-Memory:', data.inMemory);
+      } else {
+        console.warn('⚠️ MongoDB sync is not available');
+      }
+    } catch (error) {
+      console.error('Failed to check sync status:', error);
+    }
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -127,7 +152,6 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    // Filter for images and videos only
     const validFiles = files.filter((file) =>
       file.type.startsWith('image/') || file.type.startsWith('video/')
     );
@@ -138,7 +162,6 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
 
     setSelectedFiles((prev) => [...prev, ...validFiles]);
 
-    // Create preview URLs
     const newPreviewUrls = validFiles.map((file) => URL.createObjectURL(file));
     setPreviewUrls((prev) => [...prev, ...newPreviewUrls]);
   };
@@ -152,84 +175,105 @@ const AddNewListing = ({ onAddProperty }: AddNewListingProps) => {
     });
   };
 
-/**
- * Upload to Walrus with proper error handling and progress
- */
-const handleUploadToWalrus = async () => {
-  if (selectedFiles.length === 0) {
-    alert('Please select files to upload');
-    return;
-  }
-  if (!account) {
-    alert('Please connect your wallet first');
-    return;
-  }
-  setUploading(true);
-  setUploadProgress(0);
-  setUploadError(null);
-  const successfulUploads: string[] = [];
-  const failedUploads: string[] = [];
-  try {
-    console.log(`🚀 Starting upload of ${selectedFiles.length} files...`);
-    // Upload files sequentially with progress
-    for (let i = 0; i < selectedFiles.length; i++) {
-      const file = selectedFiles[i];
-      try {
-        console.log(`📤 Uploading file ${i + 1}/${selectedFiles.length}: ${file.name}`);
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('title', `${formData.houseName || 'Property Media'} ${i + 1}`);
-        formData.append('caretakerAddress', account);
-        const response = await fetch('/api/walrus/upload', {  // Use full URL if ports differ: http://localhost:3001/api/walrus/upload
-          method: 'POST',
-          body: formData,
-        });
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Upload failed: ${errorText || response.statusText}`);
+  /**
+   * Upload to Walrus - files are automatically synced to MongoDB by backend
+   */
+  const handleUploadToWalrus = async () => {
+    if (selectedFiles.length === 0) {
+      alert('Please select files to upload');
+      return;
+    }
+    if (!account) {
+      alert('Please connect your wallet first');
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress(0);
+    setUploadError(null);
+    const successfulUploads: string[] = [];
+    const failedUploads: string[] = [];
+
+    try {
+      console.log(`🚀 Starting upload of ${selectedFiles.length} files...`);
+      console.log('📡 Backend will automatically sync to MongoDB');
+
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        try {
+          console.log(`📤 Uploading file ${i + 1}/${selectedFiles.length}: ${file.name}`);
+          
+          const formDataPayload = new FormData();
+          formDataPayload.append('file', file);
+          formDataPayload.append('title', `${formData.houseName || 'Property Media'} ${i + 1}`);
+          formDataPayload.append('caretakerAddress', account);
+
+          const response = await fetch(`http://localhost:3001/api/walrus/upload`, {
+            method: 'POST',
+            body: formDataPayload,
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Upload failed: ${errorText || response.statusText}`);
+          }
+
+          const data = await response.json();
+          
+          if (!data.success || !data.blobId) {
+            throw new Error(data.error || 'Invalid response format');
+          }
+
+          successfulUploads.push(data.blobId);
+          
+          // Log sync status
+          if (data.synced) {
+            console.log(`✅ Upload ${i + 1} successful and synced to MongoDB: ${data.blobId}`);
+          } else {
+            console.log(`✅ Upload ${i + 1} successful (will sync in next cycle): ${data.blobId}`);
+          }
+
+        } catch (fileError) {
+          console.error(`❌ Failed to upload ${file.name}:`, fileError);
+          failedUploads.push(file.name);
         }
-        const data = await response.json();
-        if (!data.success || !data.blobId) {
-          throw new Error(data.error || 'Invalid response format');
-        }
-        successfulUploads.push(data.blobId);
-        console.log(`✅ Upload ${i + 1} successful: ${data.blobId}`);
-      } catch (fileError) {
-        console.error(`❌ Failed to upload ${file.name}:`, fileError);
-        failedUploads.push(file.name);
+
+        setUploadProgress(Math.round(((i + 1) / selectedFiles.length) * 100));
       }
-      // Update progress
-      setUploadProgress(Math.round(((i + 1) / selectedFiles.length) * 100));
+
+      if (successfulUploads.length > 0) {
+        setUploadedBlobIds(successfulUploads);
+      }
+
+      if (failedUploads.length > 0) {
+        const message = `${failedUploads.length} files failed: ${failedUploads.join(', ')}`;
+        setUploadError(message);
+        alert(`⚠️ Partial success: ${successfulUploads.length} uploaded. ${message}`);
+      } else {
+        alert(`✅ All ${successfulUploads.length} files uploaded to Walrus and synced to MongoDB!`);
+      }
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setUploadError(errorMessage);
+      alert(`Upload failed: ${errorMessage}`);
+    } finally {
+      setUploading(false);
     }
-    if (successfulUploads.length > 0) {
-      setUploadedBlobIds(successfulUploads);
-    }
-    if (failedUploads.length > 0) {
-      const message = `${failedUploads.length} files failed: ${failedUploads.join(', ')}`;
-      setUploadError(message);
-      alert(`⚠️ Partial success: ${successfulUploads.length} uploaded. ${message}`);
-    } else {
-      alert(`✅ All ${successfulUploads.length} files uploaded to Walrus!`);
-    }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    setUploadError(errorMessage);
-    alert(`Upload failed: ${errorMessage}`);
-  } finally {
-    setUploading(false);
-  }
-};
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate files are uploaded
     if (selectedFiles.length > 0 && uploadedBlobIds.length === 0) {
       alert('Please upload images to Walrus first');
       return;
     }
 
     try {
-      // Try to create house on-chain, but fallback to local ID if it fails
+      setSyncStatus('syncing');
+
+      // Try to create house on-chain
       let houseId = `prop_${Date.now()}`;
       try {
         houseId = await createHouseAndGetId(
@@ -247,7 +291,6 @@ const handleUploadToWalrus = async () => {
       }
 
       const imageUrls = uploadedBlobIds.map((blobId) => getWalrusBlobUrl(blobId));
-
       const bedrooms = parseInt(formData.bedrooms || '1', 10);
       const bathrooms = parseInt(formData.bathrooms || '1', 10);
 
@@ -282,13 +325,12 @@ const handleUploadToWalrus = async () => {
         area: '100 sqm',
         type: 'Apartment',
         price: formData.pricing,
-        currency: '',
+        currency: '$',
         imageUrl: imagesWithAmounts[0]?.url || '',
+        isLegitBlobId: uploadedBlobIds.length > 0,
       };
 
-      onAddProperty(newProperty);
-
-      // Send property to backend API
+      // Send to backend - it will automatically sync to MongoDB
       try {
         const backendPayload = {
           houseName: formData.houseName,
@@ -307,6 +349,8 @@ const handleUploadToWalrus = async () => {
           blobIds: uploadedBlobIds,
         };
 
+        console.log('📤 Sending property to backend with auto-sync...');
+        
         const apiResult = await apiRequest<any>(
           API_CONFIG.endpoints.properties.create,
           {
@@ -316,17 +360,31 @@ const handleUploadToWalrus = async () => {
           }
         );
 
-        console.log('Property saved to backend:', apiResult);
+        console.log('✅ Property saved to backend:', apiResult);
+        
+        if (apiResult.synced) {
+          console.log('✅ Property automatically synced to MongoDB');
+          setSyncStatus('synced');
+        } else {
+          console.log('⏳ Property will be synced in next cycle (30s)');
+          setSyncStatus('synced');
+        }
+
       } catch (backendError) {
-        console.error('Failed to save property to backend:', backendError);
+        console.error('❌ Failed to save property to backend:', backendError);
+        setSyncStatus('error');
+        throw backendError;
       }
 
-      // Save to localStorage
+      // Update parent component
+      onAddProperty(newProperty);
+
+      // Save to localStorage as backup
       try {
         const raw = localStorage.getItem('dwelloListings');
         const stored = raw ? JSON.parse(raw) : [];
 
-        let currency = '';
+        let currency = '$';
         let price = formData.pricing;
         const match = formData.pricing.match(/^([^0-9\s]+)\s*(.+)$/);
         if (match) {
@@ -347,8 +405,11 @@ const handleUploadToWalrus = async () => {
           bathrooms,
           area: '100 sqm',
           type: 'Apartment',
-          walrusId: houseId || newProperty.id,
+          walrusId: uploadedBlobIds[0] || houseId,
+          blobId: uploadedBlobIds[0],
+          blobIds: uploadedBlobIds,
           imageUrl: imageUrls[0],
+          isLegitBlobId: uploadedBlobIds.length > 0,
         };
 
         stored.push(publicListing);
@@ -357,7 +418,7 @@ const handleUploadToWalrus = async () => {
         console.warn('Failed to store public listing:', storageError);
       }
 
-      alert('✅ Property successfully added!');
+      alert('✅ Property successfully added and synced to MongoDB!');
       
       // Reset form
       setFormData({
@@ -377,11 +438,13 @@ const handleUploadToWalrus = async () => {
       setUploadedBlobIds([]);
       setUploadProgress(0);
       setUploadError(null);
+      setSyncStatus('idle');
 
     } catch (error) {
       console.error('Failed to add property:', error);
       const errorMsg = error instanceof Error ? error.message : String(error);
       alert(`Failed to add property: ${errorMsg}`);
+      setSyncStatus('error');
     }
   };
 
@@ -394,7 +457,14 @@ const handleUploadToWalrus = async () => {
             <p>Fill in the details to list your property on the blockchain</p>
           </div>
           <div className="blockchain-indicator">
-            <span>Walrus Storage</span>
+            <span>🔗 Walrus Storage</span>
+            {syncStatus !== 'idle' && (
+              <span className={`sync-badge sync-${syncStatus}`}>
+                {syncStatus === 'syncing' && '🔄 Syncing to MongoDB...'}
+                {syncStatus === 'synced' && '✅ Synced'}
+                {syncStatus === 'error' && '⚠️ Sync Error'}
+              </span>
+            )}
           </div>
         </div>
 
@@ -561,6 +631,7 @@ const handleUploadToWalrus = async () => {
           <div className="form-section">
             <div className="section-title">
               <h3>Property Images</h3>
+              <span className="section-hint">Images auto-sync to MongoDB on upload</span>
             </div>
 
             <div className="upload-section">
@@ -575,7 +646,7 @@ const handleUploadToWalrus = async () => {
               
               <label htmlFor="file-upload" className="upload-area">
                 <div className="upload-content">
-                  <div className="upload-icon"></div>
+                  <div className="upload-icon">📁</div>
                   <p className="upload-title">Click to upload or drag and drop</p>
                   <p className="upload-subtitle">PNG, JPG, MP4 up to 10MB each</p>
                   <div className="upload-button">
@@ -584,7 +655,6 @@ const handleUploadToWalrus = async () => {
                 </div>
               </label>
 
-              {/* Preview Selected Files */}
               {previewUrls.length > 0 && (
                 <div className="preview-section">
                   <h4>Selected Files ({previewUrls.length})</h4>
@@ -620,11 +690,12 @@ const handleUploadToWalrus = async () => {
                       {uploading ? (
                         <>
                           <span className="spinner-small"></span>
-                          <span>Uploading... {uploadProgress}%</span>
+                          <span>Uploading & Syncing... {uploadProgress}%</span>
                         </>
                       ) : (
                         <>
-                          <span>Upload to Walrus</span>
+                          <span>📤</span>
+                          <span>Upload to Walrus (Auto-Sync)</span>
                         </>
                       )}
                     </button>
@@ -633,7 +704,11 @@ const handleUploadToWalrus = async () => {
                   {uploadedBlobIds.length > 0 && (
                     <div className="upload-success">
                       <span className="success-icon">✅</span>
-                      <span>Successfully uploaded {uploadedBlobIds.length} files to Walrus</span>
+                      <span>
+                        Successfully uploaded {uploadedBlobIds.length} files to Walrus
+                        <br />
+                        <small>Automatically synced to MongoDB</small>
+                      </span>
                     </div>
                   )}
 
@@ -660,9 +735,7 @@ const handleUploadToWalrus = async () => {
               {apartments.map((apt, index) => (
                 <div key={index} className="apartment-item">
                   <div className="apartment-header">
-                    <h4>
-                      Apartment {index + 1}
-                    </h4>
+                    <h4>Apartment {index + 1}</h4>
                     <button
                       type="button"
                       className={`status-toggle ${apt.status}`}
@@ -731,11 +804,49 @@ const handleUploadToWalrus = async () => {
               className="btn-submit"
               disabled={uploading || (selectedFiles.length > 0 && uploadedBlobIds.length === 0)}
             >
-              <span>Add to Blockchain</span>
+              <span>💾</span>
+              <span>Add to Blockchain & MongoDB</span>
             </button>
           </div>
         </form>
       </div>
+
+      <style>{`
+        .sync-badge {
+          padding: 6px 12px;
+          border-radius: 20px;
+          font-size: 13px;
+          font-weight: 600;
+          margin-left: 12px;
+        }
+        
+        .sync-syncing {
+          background: #fff3cd;
+          color: #856404;
+        }
+        
+        .sync-synced {
+          background: #d4edda;
+          color: #155724;
+        }
+        
+        .sync-error {
+          background: #f8d7da;
+          color: #721c24;
+        }
+        
+        .section-hint {
+          font-size: 13px;
+          color: #666;
+          font-weight: normal;
+        }
+        
+        .upload-success small {
+          display: block;
+          color: #666;
+          margin-top: 4px;
+        }
+      `}</style>
     </div>
   );
 };

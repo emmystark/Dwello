@@ -7,6 +7,8 @@ import CaretakerDashboard from './components/Caretaker/CaretakerDashboard'
 
 import AllProperties from './components/AllProperties';
 
+import AddProperty from './components/AddProperty';
+
 
 
 import WalletBalance from './components/WalletBalance'
@@ -152,6 +154,7 @@ function App() {
         <Route path="/" element={<AppContent />} />
         <Route path="/AllProperties" element={<AllProperties />} />
         <Route path="/propertydetails" element={<PropertyDetails />} />
+        <Route path="/add-property" element={<AddProperty />} />
         {/* Add other routes as needed */}
       </Routes>
     </Router>

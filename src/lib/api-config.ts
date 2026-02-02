@@ -12,7 +12,7 @@ export const API_CONFIG = {
     // Properties
     properties: {
       list: '/api/properties',
-      create: '/api/properties',
+      create: '/api/properties/create',
       get: (id: string) => `/api/properties/${id}`,
       update: (id: string) => `/api/properties/${id}`,
       delete: (id: string) => `/api/properties/${id}`,

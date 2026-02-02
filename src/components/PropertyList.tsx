@@ -1,60 +1,9 @@
-import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-
-// HARDCODED TEST DATA - Replace with your real data later
-const MOCK_PROPERTIES = [
-  {
-    id: "1",
-    title: "Luxury Apartment",
-    location: "London, England",
-    price: "500000",
-    currency: "$",
-    type: "Apartment",
-    bedrooms: 3,
-    bathrooms: 2,
-    area: "1200 sq ft",
-    blobId: "tZRqOg3dwMN5bDSn4U4OWIzFTByeoeeZI9BLqpHw62I"
-  },
-  {
-    id: "2",
-    title: "Modern Villa",
-    location: "Toronto, Canada",
-    price: "750000",
-    currency: "$",
-    type: "Villa",
-    bedrooms: 4,
-    bathrooms: 3,
-    area: "2500 sq ft",
-    blobId: "enMxo73vqQhxUhjkBO8qabglFVw337aoUAv0NOMGcIc"
-  },
-  {
-    id: "3",
-    title: "Cozy Studio",
-    location: "Port Harcourt, Nigeria",
-    price: "250000",
-    currency: "$",
-    type: "Studio",
-    bedrooms: 1,
-    bathrooms: 1,
-    area: "600 sq ft",
-    blobId: "sF1s6XpMehQr5kjvd7qm8wTqVqmn8mKepHzVoGe6sOg"
-  },
-  {
-    id: "4",
-    title: "Family House",
-    location: "Paris, France",
-    price: "600000",
-    currency: "$",
-    type: "House",
-    bedrooms: 5,
-    bathrooms: 4,
-    area: "3000 sq ft",
-    blobId: "es0GR3ydVkcXgbam23R_uU1Kw6cx-fYarb79FBH_KW0"
-  }
-];
+import { useProperties } from '../hooks/useProperties';
 
 const PropertyList = () => {
   const navigate = useNavigate();
+  const { properties, loading, error } = useProperties();
 
   const handlePropertyClick = (property: any) => {
     navigate('/propertydetails', { 
@@ -62,6 +11,89 @@ const PropertyList = () => {
     });
   };
 
+  // LOADING STATE
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '60px 20px',
+        minHeight: '400px'
+      }}>
+        <div style={{
+          border: '4px solid #f3f3f3',
+          borderTop: '4px solid #2196f3',
+          borderRadius: '50%',
+          width: '50px',
+          height: '50px',
+          animation: 'spin 1s linear infinite',
+          marginBottom: '20px'
+        }}></div>
+        <p style={{ fontSize: '18px', color: '#666' }}>
+          Loading properties from Walrus blockchain...
+        </p>
+        <p style={{ fontSize: '14px', color: '#999', marginTop: '10px' }}>
+          Fetching from backend at http://localhost:3001
+        </p>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  // ERROR STATE
+  if (error) {
+    return (
+      <div style={{ padding: '60px 20px', textAlign: 'center' }}>
+        <div style={{ fontSize: '64px', marginBottom: '20px' }}>⚠️</div>
+        <h3 style={{ fontSize: '24px', marginBottom: '10px', color: '#d32f2f' }}>
+          Error Loading Properties
+        </h3>
+        <p style={{ marginBottom: '20px', color: '#666' }}>{error}</p>
+        <p style={{ fontSize: '14px', color: '#999', marginBottom: '20px' }}>
+          Make sure your backend is running at http://localhost:3001
+        </p>
+        <button 
+          onClick={() => window.location.reload()}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#2196f3',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            fontSize: '16px'
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // EMPTY STATE
+  if (properties.length === 0) {
+    return (
+      <div style={{ padding: '60px 20px', textAlign: 'center' }}>
+        <div style={{ fontSize: '64px', marginBottom: '20px' }}>🏘️</div>
+        <h3 style={{ fontSize: '24px', marginBottom: '10px' }}>No Properties Found</h3>
+        <p style={{ color: '#666', marginBottom: '20px' }}>
+          No properties have been uploaded to the database yet.
+        </p>
+        <p style={{ fontSize: '14px', color: '#999' }}>
+          Use the /api/properties/create endpoint to add properties
+        </p>
+      </div>
+    );
+  }
+
+  // MAIN DISPLAY
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
       {/* Header */}
@@ -69,8 +101,11 @@ const PropertyList = () => {
         <h2 style={{ fontSize: '36px', marginBottom: '10px', fontWeight: 'bold' }}>
           All Available Listings on Walrus
         </h2>
-        <p style={{ fontSize: '18px', color: '#666' }}>
-          {MOCK_PROPERTIES.length} properties stored on the blockchain
+        <p style={{ fontSize: '18px', color: '#666', marginBottom: '5px' }}>
+          {properties.length} properties stored on the blockchain
+        </p>
+        <p style={{ fontSize: '14px', color: '#999' }}>
+          {properties.filter(p => p.isLegitBlobId).length} with verified Walrus images
         </p>
       </div>
 
@@ -80,8 +115,9 @@ const PropertyList = () => {
         gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
         gap: '24px'
       }}>
-        {MOCK_PROPERTIES.map((property) => {
-          const isLegitBlobId = property.blobId && property.blobId !== 'null' && property.blobId !== 'placeholder blob id';
+        {properties.map((property) => {
+          // Using the EXACT working pattern
+          const isLegitBlobId = property.isLegitBlobId;
           
           return (
             <div 
@@ -105,7 +141,7 @@ const PropertyList = () => {
                 e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
               }}
             >
-              {/* Image Section - EXACTLY like your working code */}
+              {/* Image Section - EXACT WORKING PATTERN */}
               <div style={{ position: 'relative' }}>
                 {isLegitBlobId ? (
                   <div className="image-container">
@@ -119,6 +155,8 @@ const PropertyList = () => {
                         objectFit: 'cover',
                         display: 'block'
                       }}
+                      onLoad={() => console.log('✅ Image loaded:', property.title, property.blobId)}
+                      onError={() => console.error('❌ Image failed:', property.title, property.blobId)}
                     />
                   </div>
                 ) : (
@@ -126,16 +164,18 @@ const PropertyList = () => {
                     width: '100%',
                     height: '220px',
                     display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
                     backgroundColor: '#f5f5f5',
-                    fontSize: '48px'
+                    gap: '10px'
                   }}>
-                    🏠
+                    <div style={{ fontSize: '48px' }}>🏠</div>
+                    <p style={{ fontSize: '12px', color: '#999' }}>No Walrus image</p>
                   </div>
                 )}
 
-                {/* Badges */}
+                {/* Verified Badge */}
                 <div style={{
                   position: 'absolute',
                   top: '10px',
@@ -145,11 +185,13 @@ const PropertyList = () => {
                   padding: '6px 12px',
                   borderRadius: '20px',
                   fontSize: '12px',
-                  fontWeight: 'bold'
+                  fontWeight: 'bold',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                 }}>
                   {isLegitBlobId ? '✓ Verified' : 'Listed'}
                 </div>
 
+                {/* Property Type Badge */}
                 <div style={{
                   position: 'absolute',
                   top: '10px',
@@ -170,7 +212,8 @@ const PropertyList = () => {
                 <h3 style={{ 
                   fontSize: '20px', 
                   marginBottom: '8px',
-                  fontWeight: 'bold'
+                  fontWeight: 'bold',
+                  color: '#333'
                 }}>
                   {property.title}
                 </h3>
@@ -178,9 +221,13 @@ const PropertyList = () => {
                 <p style={{ 
                   fontSize: '14px', 
                   color: '#666',
-                  marginBottom: '12px'
+                  marginBottom: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
                 }}>
-                  📍 {property.location}
+                  <span>📍</span>
+                  <span>{property.location}</span>
                 </p>
                 
                 <p style={{ 
@@ -190,19 +237,31 @@ const PropertyList = () => {
                   marginBottom: '12px'
                 }}>
                   {property.currency}{property.price}
+                  {property.period && (
+                    <span style={{ 
+                      fontSize: '14px', 
+                      fontWeight: 'normal',
+                      color: '#666' 
+                    }}>
+                      {' '}/ {property.period}
+                    </span>
+                  )}
                 </p>
                 
-                <div style={{ 
-                  display: 'flex', 
-                  gap: '16px',
-                  fontSize: '14px',
-                  color: '#666',
-                  marginBottom: '16px'
-                }}>
-                  <span>🛏️ {property.bedrooms}</span>
-                  <span>🚿 {property.bathrooms}</span>
-                  <span>📐 {property.area}</span>
-                </div>
+                {(property.bedrooms || property.bathrooms || property.area) && (
+                  <div style={{ 
+                    display: 'flex', 
+                    gap: '16px',
+                    fontSize: '14px',
+                    color: '#666',
+                    marginBottom: '16px',
+                    flexWrap: 'wrap'
+                  }}>
+                    {property.bedrooms && <span>🛏️ {property.bedrooms}</span>}
+                    {property.bathrooms && <span>🚿 {property.bathrooms}</span>}
+                    {property.area && <span>📐 {property.area}</span>}
+                  </div>
+                )}
                 
                 {isLegitBlobId && (
                   <div style={{
@@ -216,13 +275,16 @@ const PropertyList = () => {
                     backgroundColor: '#f8f8f8',
                     borderRadius: '6px'
                   }}>
-                    <span>🔗</span>
-                    <span style={{ 
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      fontFamily: 'monospace'
-                    }}>
+                    <span style={{ fontSize: '14px' }}>🔗</span>
+                    <span 
+                      title={`Walrus Blob ID: ${property.blobId}`}
+                      style={{ 
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        fontFamily: 'monospace'
+                      }}
+                    >
                       {property.blobId.substring(0, 20)}...
                     </span>
                   </div>
@@ -238,7 +300,8 @@ const PropertyList = () => {
                     borderRadius: '8px',
                     fontSize: '15px',
                     fontWeight: '600',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s'
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1976d2'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#2196f3'}
@@ -251,23 +314,41 @@ const PropertyList = () => {
         })}
       </div>
 
-      {/* Test Image at Bottom */}
-      {/* <div style={{ marginTop: '60px', textAlign: 'center' }}>
-        <h3 style={{ marginBottom: '20px' }}>Test Image Display</h3>
-        <div className="image-container" style={{ maxWidth: '600px', margin: '0 auto' }}>
+      {/* Test Image at Bottom - Proves Walrus works */}
+      <div style={{ 
+        marginTop: '60px', 
+        padding: '30px',
+        backgroundColor: '#f5f5f5',
+        borderRadius: '12px',
+        textAlign: 'center'
+      }}>
+        <h3 style={{ marginBottom: '15px', color: '#666' }}>
+          Walrus Connection Test
+        </h3>
+        <p style={{ fontSize: '14px', color: '#999', marginBottom: '20px' }}>
+          This image should always load if Walrus is working
+        </p>
+        <div className="image-container" style={{ 
+          maxWidth: '600px', 
+          margin: '0 auto',
+          border: '2px solid #e0e0e0',
+          borderRadius: '8px',
+          overflow: 'hidden'
+        }}>
           <img
             src="https://aggregator.walrus-testnet.walrus.space/v1/blobs/tZRqOg3dwMN5bDSn4U4OWIzFTByeoeeZI9BLqpHw62I"
-            alt="Display Image"
+            alt="Walrus Test Image"
             className="display-image"
             style={{ 
               width: '100%',
               height: 'auto',
-              display: 'block',
-              borderRadius: '8px'
+              display: 'block'
             }}
+            onLoad={() => console.log('✅ Test image loaded - Walrus is working!')}
+            onError={() => console.error('❌ Test image failed - Walrus might be down')}
           />
         </div>
-      </div> */}
+      </div>
     </div>
   );
 };

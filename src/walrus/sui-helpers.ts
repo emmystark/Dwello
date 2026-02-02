@@ -173,7 +173,7 @@ export async function publishPropertyMetadata(
   apiUrl: string = process.env.REACT_APP_API_URL || 'http://localhost:3001'
 ): Promise<string> {
   try {
-    const response = await fetch(`${apiUrl}/api/properties`, {
+    const response = await fetch(`${apiUrl}/api/properties/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -206,7 +206,7 @@ export async function linkPropertyMetadata(
   apiUrl: string = process.env.REACT_APP_API_URL || 'http://localhost:3001'
 ): Promise<void> {
   try {
-    const response = await fetch(`${apiUrl}/api/properties/${propertyId}`, {
+    const response = await fetch(`${apiUrl}/api/properties/create/${propertyId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',

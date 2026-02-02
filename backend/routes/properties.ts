@@ -313,6 +313,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
+
+
 /**
  * GET /api/properties/walrus/:blobId - Get property by Walrus blob ID
  */
@@ -341,6 +343,101 @@ router.get('/walrus/:blobId', async (req: Request, res: Response) => {
       success: false,
       error: 'Failed to fetch property',
       message: error.message,
+    });
+  }
+});
+
+// backend/routes/properties.js (or wherever your route is)
+
+router.post('/api/properties/create', async (req: Request, res: Response) => {
+  try {
+    console.log('📥 Received property creation request:', req.body);
+
+    const {
+      houseName,
+      address,
+      price,
+      bedrooms,
+      bathrooms,
+      area,
+      propertyType,
+      country,
+      state,
+      city,
+      description,
+      caretakerAddress,
+      imagesWithAmounts,
+      blobIds
+    } = req.body;
+
+    // Extract the first blob ID for the main property image
+    const walrusId = blobIds && blobIds.length > 0 ? blobIds[0] : null;
+
+    // Create property document
+    const property = {
+      // Use houseName as title
+      title: houseName,
+      houseName,
+      
+      // Walrus image - CRITICAL for display
+      walrusId,
+      blobId: walrusId,
+      blobIds: blobIds || [],
+      
+      // Location
+      address,
+      country,
+      state,
+      city,
+      location: `${city}, ${state}`,
+      
+      // Pricing
+      price: price.toString(),
+      pricing: price.toString(),
+      currency: '$',
+      period: 'year',
+      
+      // Property details
+      bedrooms: parseInt(bedrooms) || 0,
+      bathrooms: parseInt(bathrooms) || 0,
+      area,
+      type: propertyType || 'Apartment',
+      propertyType: propertyType || 'Apartment',
+      
+      // Additional info
+      description,
+      caretakerAddress,
+      
+      // Images
+      images: imagesWithAmounts || [],
+      imagesWithAmounts: imagesWithAmounts || [],
+      
+      // Metadata
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    console.log('💾 Saving property to database:', property);
+
+    // Save to MongoDB
+    const result = await db.collection('properties').insertOne(property);
+    
+    console.log('✅ Property saved successfully:', result.insertedId);
+
+    res.json({
+      success: true,
+      property: {
+        ...property,
+        _id: result.insertedId
+      },
+      message: 'Property created successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Error creating property:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });

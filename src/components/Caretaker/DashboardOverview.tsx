@@ -1,11 +1,12 @@
 import type { Property } from '../../types'
+import { useState, useEffect } from "react";
 
 interface DashboardOverviewProps {
   properties: Property[]
   totalEarnings: number
 }
 
-const DashboardOverview = ({ properties, totalEarnings }: DashboardOverviewProps) => {
+const DashboardOverview = ({ properties: propProperties, totalEarnings }: DashboardOverviewProps) => {
   const totalProperties = properties.length
   const totalApartments = properties.reduce((sum, prop) => sum + prop.apartments.length, 0)
   const occupiedApartments = properties.reduce(
@@ -14,6 +15,46 @@ const DashboardOverview = ({ properties, totalEarnings }: DashboardOverviewProps
   )
   const vacantApartments = totalApartments - occupiedApartments
   const occupancyRate = totalApartments > 0 ? Math.round((occupiedApartments / totalApartments) * 100) : 0
+
+  //  const [properties, setProperties] = useState<Property[]>(propProperties || []);
+  const [imageData, setImageData] = useState<Record<string, string>>({});
+  const [loadingImages, setLoadingImages] = useState(false);
+  const [loadingProperties, setLoadingProperties] = useState(!propProperties);
+
+
+
+
+
+  useEffect(() => {
+  if (!propProperties) {
+    const fetchProperties = async () => {
+      setLoadingProperties(true);
+      setError(null);
+      try {
+        const url = new URL('http://localhost:3001/api/properties', window.location.origin);  // Use full URL if proxy issues
+        if (account) {
+          url.searchParams.append('caretakerAddress', account);
+        }
+        const response = await fetch(url.toString());
+        if (!response.ok) {
+          throw new Error(`Failed: ${response.statusText}`);
+        }
+        const data = await response.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Invalid response');
+        }
+        setProperties(data.properties);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoadingProperties(false);
+      }
+    };
+    fetchProperties();
+  }
+}, [propProperties, account]);
+
+
 
   return (
     <div className="dashboard-overview">
